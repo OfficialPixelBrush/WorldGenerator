@@ -12,10 +12,12 @@
 // 2 Bushes
 // 3 Grass
 // 4 Sand
-// 5 Water
+// 5 Lake
+// 6 Water
+// 7 Stone
 int numTiles = 5;
-#define mapSizeX 1024
-#define mapSizeY 512
+#define mapSizeX 64
+#define mapSizeY 32
 int map[mapSizeX][mapSizeY] = {0};
 int map2[mapSizeX][mapSizeY] = {0};
 
@@ -25,7 +27,9 @@ typedef enum {
 	bushTile,
 	grassTile,
 	sandTile,
+	lakeTile,
 	waterTile,
+	stoneTile,
 	errorTile
 } tilename;
 
@@ -53,31 +57,39 @@ int invalidTile = emptyTile;
 
 int printTile() {
 	switch(map2[x][y]) {
-		case 0: // Empty
+		case emptyTile: // Empty
 			printf("\x1b[0m");
 			printf(" ");
 			break;
-		case 1: // Tree
+		case treeTile: // Tree
 			printf("\x1b[92;42m");
 			printf("T");
 			break;
-		case 2: // Bush
+		case bushTile: // Bush
 			printf("\x1b[32;102m");
 			printf("m");
 			break;
-		case 3: // Grass
+		case grassTile: // Grass
 			printf("\x1b[32;102m");
 			printf(",");
 			break;
-		case 4: // Sand
+		case sandTile: // Sand
 			printf("\x1b[33;103m");
 			printf("#");
 			break;
-		case 5: // Water
+		case lakeTile: // Lake
+			printf("\x1b[37;46m");
+			printf("~");
+			break;
+		case waterTile: // Water
 			printf("\x1b[37;104m");
 			printf("~");
 			break;
-		case 6: // Error
+		case stoneTile: // Stone
+			printf("\x1b[30;100m");
+			printf("^");
+			break;
+		case errorTile: // Error
 			printf("\x1b[35;40m");
 			printf("#");
 			break;
@@ -104,6 +116,22 @@ int getRandomLimited(int max) {
 	return rand() % max;
 }
 
+int canNeighbor(int tile) {
+	if ((surrounding[0] == tile) || (surrounding[1] == tile) || (surrounding[2] == tile) || (surrounding[3] == tile)) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+int surroundedBy(int tile) {
+	if ((surrounding[0] == tile) && (surrounding[1] == tile) && (surrounding[2] == tile) && (surrounding[3] == tile)) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 int main() {
 	for (y = 0; y < mapSizeY; y++) {
 		for (x = 0; x < mapSizeX; x++) {
@@ -118,7 +146,7 @@ int main() {
 	printf("\x1b[H"); // Set Cursor to Home
 	
 	// Pregen
-	int numberOfIslands = 1000;
+	int numberOfIslands = 5;
 	for (int i = 1; i <= numberOfIslands; i++) {
 		int islandSize = 3+getRandomLimited(16);
 		int x1 = (int)getRandomLimited(mapSizeX);//(mapSizeX/(1+getRandomLimited(16)));
@@ -127,13 +155,10 @@ int main() {
 			for (x = 0; x < mapSizeX; x++) {
 				int x2 = x;
 				int y2 = y;
+				int distanceToIslandCenter = getIntDistance(x1,y1,x2,y2);
 				// Generate Water Circle
-				if (getIntDistance(x1,y1,x2,y2) < islandSize+(getRandomLimited(2))) {
+				if (distanceToIslandCenter < islandSize+(getRandomLimited(5))) {
 					map2[x2][y2] = emptyTile;
-				}
-				// Generate Tree Circle
-				if (getIntDistance(x1,y1,x2,y2) < (int)(islandSize/(1+getRandomLimited(5)))) {
-					map2[x2][y2] = treeTile;
 				}
 			}
 		}
@@ -175,10 +200,7 @@ int main() {
 					if (i != iterations) {
 						switch (id) {
 							case treeTile: // Tree
-								if (((surrounding[0] == emptyTile) || (surrounding[0] == treeTile) || (surrounding[0] == bushTile)) &&
-									((surrounding[1] == emptyTile) || (surrounding[1] == treeTile) || (surrounding[1] == bushTile)) &&
-									((surrounding[2] == emptyTile) || (surrounding[2] == treeTile) || (surrounding[2] == bushTile)) &&
-									((surrounding[3] == emptyTile) || (surrounding[3] == treeTile) || (surrounding[3] == bushTile))) {
+								if (surroundedBy(emptyTile) || surroundedBy(treeTile) || surroundedBy(bushTile)) {
 									map2[x][y] = treeTile; // Place Tree
 								} else {
 									id = treeTile;
@@ -186,10 +208,7 @@ int main() {
 								}
 								break;
 							case bushTile: // Bushes
-								if (((surrounding[0] == emptyTile) || (surrounding[0] == bushTile) || (surrounding[0] == treeTile) || (surrounding[0] == grassTile)) &&
-									((surrounding[1] == emptyTile) || (surrounding[1] == bushTile) || (surrounding[1] == treeTile) || (surrounding[1] == grassTile)) &&
-									((surrounding[2] == emptyTile) || (surrounding[2] == bushTile) || (surrounding[2] == treeTile) || (surrounding[2] == grassTile)) &&
-									((surrounding[3] == emptyTile) || (surrounding[3] == bushTile) || (surrounding[3] == treeTile) || (surrounding[3] == grassTile))) {
+								if (surroundedBy(emptyTile) || surroundedBy(bushTile) || surroundedBy(treeTile) || surroundedBy(grassTile)) {
 									map2[x][y] = bushTile; // Place Bush
 								} else {
 									id = bushTile;
@@ -197,10 +216,7 @@ int main() {
 								}
 								break;
 							case grassTile: // Grass
-								if (((surrounding[0] == emptyTile) || (surrounding[0] == bushTile) || (surrounding[0] == grassTile) || (surrounding[0] == sandTile)) &&
-									((surrounding[1] == emptyTile) || (surrounding[1] == bushTile) || (surrounding[1] == grassTile) || (surrounding[1] == sandTile)) &&
-									((surrounding[2] == emptyTile) || (surrounding[2] == bushTile) || (surrounding[2] == grassTile) || (surrounding[2] == sandTile)) &&
-									((surrounding[3] == emptyTile) || (surrounding[3] == bushTile) || (surrounding[3] == grassTile) || (surrounding[3] == sandTile))) {
+								if (surroundedBy(emptyTile) || surroundedBy(grassTile) || surroundedBy(bushTile) || surroundedBy(sandTile) || surroundedBy(lakeTile))  {
 									map2[x][y] = grassTile; // Place Grass
 								} else {
 									id = grassTile;
@@ -208,10 +224,7 @@ int main() {
 								}
 								break;
 							case sandTile: // Sand
-								if (((surrounding[0] == emptyTile) || (surrounding[0] == grassTile) || (surrounding[0] == sandTile) || (surrounding[0] == waterTile)) &&
-									((surrounding[1] == emptyTile) || (surrounding[1] == grassTile) || (surrounding[0] == sandTile) || (surrounding[0] == waterTile)) &&
-									((surrounding[2] == emptyTile) || (surrounding[2] == grassTile) || (surrounding[0] == sandTile) || (surrounding[0] == waterTile)) &&
-									((surrounding[3] == emptyTile) || (surrounding[3] == grassTile) || (surrounding[0] == sandTile) || (surrounding[0] == waterTile))) {
+								if (surroundedBy(emptyTile) || surroundedBy(grassTile) || surroundedBy(sandTile) || surroundedBy(waterTile)) {
 									map2[x][y] = sandTile; // Place Sand
 								} else {
 									id = sandTile;
@@ -219,14 +232,14 @@ int main() {
 								}
 								break;
 							case waterTile: // Water
-								if (((surrounding[0] == emptyTile) || (surrounding[0] == sandTile) || (surrounding[0] == waterTile)) &&
-									((surrounding[1] == emptyTile) || (surrounding[1] == sandTile) || (surrounding[1] == waterTile)) &&
-									((surrounding[2] == emptyTile) || (surrounding[2] == sandTile) || (surrounding[2] == waterTile)) &&
-									((surrounding[3] == emptyTile) || (surrounding[3] == sandTile) || (surrounding[3] == waterTile))) {
-									map2[x][y] = waterTile; // Place Water
+								goto skip;
+								break;
+							case lakeTile: // Lake
+								if (surroundedBy(emptyTile) || surroundedBy(waterTile) || surroundedBy(grassTile) || surroundedBy(lakeTile)) {
+									map2[x][y] = lakeTile; // Place Lake
 								} else {
-									id = waterTile;
-									invalidTile = waterTile;
+									id = lakeTile;
+									invalidTile = lakeTile;
 								}
 								break;
 							default: // Invalid Tile
@@ -236,7 +249,7 @@ int main() {
 					
 						if (invalidTile != emptyTile) {
 							id++;
-							if (id > numTiles) {
+							if (id > numTiles-1) {
 								id = emptyTile;
 								goto skip;
 							}
