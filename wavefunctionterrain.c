@@ -15,8 +15,8 @@
 // 5 Lake
 // 6 Water
 // 7 Stone
-#define mapSizeX 128
-#define mapSizeY 128
+#define mapSizeX 512
+#define mapSizeY 256
 #define biomeSize 8
 #define macroBiomeSize 32
 int map[mapSizeX][mapSizeY] = {0};
@@ -436,56 +436,47 @@ int main() {
 	for (int macroBiomeY = 0; macroBiomeY < mapSizeY/macroBiomeSize; macroBiomeY++) {
 		for (int macroBiomeX = 0; macroBiomeX < mapSizeX/macroBiomeSize; macroBiomeX++) {
 			int macrobiome = getRandomMacroBiomeID();
-			switch(macrobiome) {
-				case continent:
-					printf("#");
-					break;
-				default:
-					macrobiome = ocean;
-				case ocean:
-					printf("~");
-					break;
-				case islands:
-					printf(":");
-					break;
-				case archipelago:
-					printf("o");
-					break;
+			if (macrobiome == emptymacrobiome) {
+				macrobiome = ocean;
 			}
-			macrobiome = macrobiomeMap[macroBiomeX][macroBiomeY];
+			macrobiomeMap[macroBiomeX][macroBiomeY] = macrobiome;
 		}
-		printf("\n");
 	}
 	
 	for (int macroBiomeY = 0; macroBiomeY < mapSizeY/macroBiomeSize; macroBiomeY++) {
 		for (int macroBiomeX = 0; macroBiomeX < mapSizeX/macroBiomeSize; macroBiomeX++) {
 			switch(macrobiomeMap[macroBiomeX][macroBiomeY]) {
 				case continent:
-					maxRandomModifer = 1;
-					islandBaseSize = 1;
-					numberOfIslands = 0;
+					maxRandomModifer = 10;
+					islandBaseSize = 6;
+					numberOfIslands = 5;
+					printf("#");
 					break;
 				case archipelago:
-					maxRandomModifer = 1;
-					islandBaseSize = 1;
-					numberOfIslands = 0;
+					maxRandomModifer = 5;
+					islandBaseSize = 3;
+					numberOfIslands = 1;
+					printf("o");
 					break;
 				case islands:
 					maxRandomModifer = 1;
 					islandBaseSize = 1;
-					numberOfIslands = 0;
+					numberOfIslands = 3;
+					printf(":");
 					break;
 				case ocean:
 					maxRandomModifer = 1;
-					islandBaseSize = 1;
+					islandBaseSize = 0;
 					numberOfIslands = 0;
+					printf("~");
 					break;
+				
 			}
 				// Generate islands
 			for (int i = 1; i <= numberOfIslands; i++) {
 				int islandSize = islandBaseSize+getRandomLimited(maxRandomModifer);
-				int x1 = (int)getRandomLimited(macroBiomeSize);//(mapSizeX/(1+getRandomLimited(16)));
-				int y1 = (int)getRandomLimited(macroBiomeSize);//(mapSizeY/(1+getRandomLimited(16)));
+				int x1 = macroBiomeX*macroBiomeSize+(int)getRandomLimited(macroBiomeSize);//(mapSizeX/(1+getRandomLimited(16)));
+				int y1 = macroBiomeY*macroBiomeSize+(int)getRandomLimited(macroBiomeSize);//(mapSizeY/(1+getRandomLimited(16)));
 				
 				//randomIsland(x1,y1,islandSize);
 				polygonIsland(x1,y1,islandSize);
@@ -504,6 +495,7 @@ int main() {
 				}*/
 			}
 		}
+		printf("\n");
 	}
 	
 	// Initial Generate Map
