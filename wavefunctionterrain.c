@@ -25,10 +25,11 @@
 // 5 Lake
 // 6 Water
 // 7 Stone
-#define mapSizeX 512
+#define mapSizeX 1024
 #define mapSizeY 512
-#define biomeSize 8
+#define biomeSize 16
 #define landmassSize 32
+#define tectonicPlates (mapSizeX+mapSizeY)/(landmassSize*8)
     
 // Window dimensions
 static const int width = mapSizeX;
@@ -41,13 +42,14 @@ char textMode = 0;
 
 // enums
 typedef enum {
-	emptyLandmass,
-	continent,
+	emptylandmass,
 	ocean,
 	islands,
 	archipelago,
-	numLandmass,
-} Landmass;
+	continent,
+	mainland,
+	numlandmass,
+} landmass;
 
 typedef enum {
 	emptybiome,
@@ -79,12 +81,12 @@ int getRandomTileID() {
 
 // Get a random Biome ID
 int getRandomBiomeID() {
-	return rand() % numBiomes;
+	return rand() % numBiomes+1;
 }
 
-// Get a random Landmass ID
-int getRandomLandmassID() {
-	return rand() % numLandmass;
+// Get a random landmass ID
+int getRandomlandmassID() {
+	return rand() % numlandmass;
 }
 
 //" "Empty can be anything 
@@ -101,6 +103,37 @@ int surrounding[4] = {emptyTile,emptyTile,emptyTile,emptyTile};
 int invalidTile = emptyTile;
 int previousRandomValues[20] = { 0 };
 SDL_Renderer *renderer;
+
+int updateProgressBar(int progress, int mode) {
+	// Draw outlined
+	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	SDL_Rect outlineRect = {mapSizeX/2-53,mapSizeY/2-13,106,26};
+	SDL_RenderFillRect(renderer, &outlineRect);
+	// Draw bg
+	SDL_SetRenderDrawColor(renderer, 64, 64, 64, 255);
+	SDL_Rect bgRect = {mapSizeX/2-50,mapSizeY/2-10,100,20};
+	SDL_RenderFillRect(renderer, &bgRect);
+	// Get color
+	switch(mode) {
+		case 0:
+			SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+			break;
+		case 1:
+			SDL_SetRenderDrawColor(renderer, 255, 192, 0, 255);
+			break;
+		case 2:
+			SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+			break;
+		default:
+			SDL_SetRenderDrawColor(renderer, 128, 128, 128, 255);
+			break;
+	}
+	// Render Progress
+	SDL_Rect barRect = {mapSizeX/2-50,mapSizeY/2-10,progress,20};
+	SDL_RenderFillRect(renderer, &barRect);
+	SDL_RenderPresent(renderer);
+	return 0;
+}
 
 // Render a tile
 int printTile(int x, int y) {
@@ -174,7 +207,7 @@ int printTile(int x, int y) {
 				SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
 				break;
 		};
-        SDL_RenderDrawPoint(renderer, x+mapSizeX, y+mapSizeY);
+        SDL_RenderDrawPoint(renderer, x, y);
 	}
 	return 0;
 }
@@ -371,7 +404,7 @@ void polygonIsland(int x1, int y1, int islandSize) {
 	float polygonY[20] = {0};
 
 	float angleIncrement = 2 * M_PI / numberOfPoints;  // Calculate the angle increment
-	float currentAngle = 0.0f;  // Starting angle
+	float currentAngle = (float)getRandomLimited(360)/360.0f;  // Starting angle
 
 	// Set random displacements of points
 	for (int pointID = 0; pointID < numberOfPoints; pointID++) {
@@ -387,7 +420,7 @@ void polygonIsland(int x1, int y1, int islandSize) {
 	// Draw Polygon on map
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (int i = 0; i < numberOfPoints - 1; ++i) {
-        SDL_RenderDrawLine(renderer, polygonX[i]+mapSizeX, polygonY[i], polygonX[i + 1]+mapSizeX, polygonY[i + 1]);
+        SDL_RenderDrawLine(renderer, polygonX[i], polygonY[i], polygonX[i + 1], polygonY[i + 1]);
     }
 	
 	// Fill out tiles inside polygon
@@ -486,7 +519,7 @@ int isNeighboringBiome(int x, int y, int biome) {
 }
 
 // Check which landmass the tile belongs to
-int checkLandmass(int x, int y) {
+int checklandmass(int x, int y) {
 	return landmassMap[x/landmassSize][y/landmassSize];
 }
 
@@ -508,48 +541,64 @@ int getNeighboringBiomes(int x, int y, int direction) {
 int renderBiome(int biomeX,int biomeY) {
 	switch(biomeMap[biomeX][biomeY]) {
 		case desert:
-			SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);	
+			SDL_SetRenderDrawColor(renderer, 255, 255, 0, 128);	
 			break;
 		case beach:
-			SDL_SetRenderDrawColor(renderer, 192, 255, 0, 255);	
+			SDL_SetRenderDrawColor(renderer, 192, 255, 0, 128);	
 			break;
 		case grasslands:
-			SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);	
+			SDL_SetRenderDrawColor(renderer, 0, 255, 0, 128);	
 			break;
 		case forest:
-			SDL_SetRenderDrawColor(renderer, 0, 128, 0, 255);	
+			SDL_SetRenderDrawColor(renderer, 0, 128, 0, 128);	
 			break;
 		case mountains:
-			SDL_SetRenderDrawColor(renderer, 128, 128, 128, 255);	
+			SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
 			break;
 		default:
-			SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);	
+			SDL_SetRenderDrawColor(renderer, 255, 0, 255, 128);	
 			break;
 	}
-	SDL_Rect rect = {biomeX*biomeSize,mapSizeY+biomeY*biomeSize,biomeSize,biomeSize};
+	SDL_Rect rect = {biomeX*biomeSize,biomeY*biomeSize,biomeSize,biomeSize};
 	SDL_RenderFillRect(renderer, &rect);
 	//SDL_RenderPresent(renderer);
 	return 0;
 }
 
+int scaleToValue(int value, int maxValue, int desiredMax) {
+	float goal = (float)desiredMax;
+	float max = (float)maxValue;
+	float scaler = 1.0f;
+	if (max < 100) {
+		scaler = goal/max;
+	} else {
+		scaler = max/goal;
+	}
+	return (int)((float)value*scaler);
+}
+
 int WinMain(int argc, char **argv) {
 	// SDL2 Prep
 	// Seed the map
-	srand ( time(NULL) );
+	int initialSeed = 0;//time(NULL);
+	srand(initialSeed);
+	float renderScale = 1.0f;
 	
 	// Initialize SDL
     CHECK_ERROR(SDL_Init(SDL_INIT_VIDEO) != 0, SDL_GetError());
 
     // Create an SDL window
-    SDL_Window *window = SDL_CreateWindow("Hello, SDL2", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width*2, height*2, SDL_WINDOW_OPENGL);
+    SDL_Window *window = SDL_CreateWindow("Hello, SDL2", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width*renderScale, height*renderScale, SDL_WINDOW_OPENGL);
     CHECK_ERROR(window == NULL, SDL_GetError());
 
     // Create a renderer (accelerated and in sync with the display refresh rate)
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);    
+	SDL_RenderSetScale(renderer, renderScale, renderScale);
     CHECK_ERROR(renderer == NULL, SDL_GetError());
 
     // Initial renderer color
-    SDL_SetRenderDrawColor(renderer, 64, 64, 64, 255);	
+    SDL_SetRenderDrawColor(renderer, 16, 16, 16, 255);	
+	SDL_RenderClear(renderer);
 	
 	// Pregen
 	for (y = 0; y < mapSizeY; y++) {
@@ -568,100 +617,200 @@ int WinMain(int argc, char **argv) {
 	}
 	
 	// Generation
+	
+	// Tectonic plates generation
+	// To generate more believable landmasses & mountain ranges
+	int tectonicPlatesOriginX[tectonicPlates]  = {0.0f};
+	int tectonicPlatesOriginY[tectonicPlates]  = {0.0f};
+	for (int i = 0; i < tectonicPlates; i++) {
+		tectonicPlatesOriginX[i] = (int)getRandomLimited(mapSizeX);
+		tectonicPlatesOriginY[i] = (int)getRandomLimitedMinMax(mapSizeY/3,mapSizeY/3*2);
+	}
+	
+	
 	int numberOfIslands = 10;
 	int islandBaseSize = 3;
 	int maxRandomModifer = 16;
-	// Landmasss
-	for (int LandmassY = 0; LandmassY < mapSizeY/landmassSize; LandmassY++) {
-		for (int LandmassX = 0; LandmassX < mapSizeX/landmassSize; LandmassX++) {
-			int Landmass = getRandomLandmassID();
-			if (Landmass == emptyLandmass) {
-				Landmass = ocean;
+	int halfLandmassSize = landmassSize/2;
+	// landmass
+	for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
+		updateProgressBar(scaleToValue(landmassY,mapSizeY/landmassSize,100)+1,0);
+		for (int landmassX = 0; landmassX < mapSizeX/landmassSize; landmassX++) {
+			// this is for a single landmass "chunk"
+			for (int y = landmassY*landmassSize; y < landmassY*landmassSize+landmassSize; y++) {
+				for (int x = landmassX*landmassSize; x < landmassX*landmassSize+landmassSize; x++) {
+					int closest = mapSizeX;
+					int closestPoint = 0;
+					for (int k = 0; k < tectonicPlates; k++) {
+						int value = getIntDistance(x,y,tectonicPlatesOriginX[k],tectonicPlatesOriginY[k]);
+						if (value < closest) {
+							closestPoint = i;
+							closest = value;
+						}
+					}
+					if (closest < 255) {
+						int r = (32*closest/255);
+						int g = (128*closest/255);
+						SDL_SetRenderDrawColor(renderer, r, g, closest, 255);
+					} else {
+						SDL_SetRenderDrawColor(renderer, 32, 128, 255, 255);
+					}
+					SDL_RenderDrawPoint(renderer, x, y);
+				}
 			}
-			landmassMap[LandmassX][LandmassY] = Landmass;
+			//SDL_RenderPresent(renderer);
+			
+			// Initial random landmass
+			int landmass = 0;
+			if (getRandomLimited(100)>95) {
+				landmass = getRandomLimitedMinMax(ocean,archipelago);
+			}
+			int closest = mapSizeX;
+			int closestPoint = 0;
+			// Then concrete ones based on tectonic plates
+			for (int i = 0; i < tectonicPlates; i++) {
+				int value = getIntDistance(landmassX*landmassSize,landmassY*landmassSize,tectonicPlatesOriginX[i],tectonicPlatesOriginY[i]);
+				if (value < closest) {
+					closestPoint = i;
+					closest = value;
+				}
+			}
+			if (closest < 20+getRandomLimited(10)) {
+				landmass = mainland;
+				SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
+				SDL_SetRenderDrawColor(renderer, 64, 32, 32, 128);
+				SDL_RenderFillRect(renderer, &rect);
+			} else if (closest < 60+getRandomLimited(20)) {
+				landmass = continent;
+				SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
+				SDL_SetRenderDrawColor(renderer, 128, 32, 32, 128);
+				SDL_RenderFillRect(renderer, &rect);
+			} else if (closest < 80) {
+				if (getRandomLimited(20)>15) {
+					landmass = continent;
+				}
+				SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
+				SDL_SetRenderDrawColor(renderer, 192, 32, 32, 128);
+				SDL_RenderFillRect(renderer, &rect);
+			}
+			if (landmass == emptylandmass) {
+				landmass = ocean;
+			}
+			landmassMap[landmassX][landmassY] = landmass;
 		}
 	}
 	
 	// Generate Islands
-	for (int LandmassY = 0; LandmassY < mapSizeY/landmassSize; LandmassY++) {
-		for (int LandmassX = 0; LandmassX < mapSizeX/landmassSize; LandmassX++) {
-			switch(landmassMap[LandmassX][LandmassY]) {
+	for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
+		updateProgressBar(scaleToValue(landmassY,mapSizeY/landmassSize,100)+1,1);
+		for (int landmassX = 0; landmassX < mapSizeX/landmassSize; landmassX++) {
+			// USE THIS TO MAKE CHUNKING POSSIBLE!!!!
+			srand( initialSeed + (landmassX * mapSizeX + landmassY));
+			switch(landmassMap[landmassX][landmassY]) {
+				case mainland:
+					maxRandomModifer = 6;
+					islandBaseSize = 10;
+					numberOfIslands = 1;
+					SDL_SetRenderDrawColor(renderer, 192, 192, 192, 128);	
+					printf("^");
+					break;
 				case continent:
 					maxRandomModifer = 10;
-					islandBaseSize = 6;
-					numberOfIslands = 5;
-					SDL_SetRenderDrawColor(renderer, 192, 192, 192, 255);	
-					//printf("#");
+					islandBaseSize = 12;
+					numberOfIslands = 2;
+					SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
+					printf("#");
 					break;
 				case archipelago:
 					maxRandomModifer = 5;
-					islandBaseSize = 3;
-					numberOfIslands = 1;
-					SDL_SetRenderDrawColor(renderer, 128, 128, 128, 192);	
-					//printf("o");
+					islandBaseSize = 2;
+					numberOfIslands = 2;
+					SDL_SetRenderDrawColor(renderer, 64, 64, 64, 128);	
+					printf("o");
 					break;
 				case islands:
-					maxRandomModifer = 1;
+					maxRandomModifer = 3;
 					islandBaseSize = 1;
 					numberOfIslands = 3;
-					SDL_SetRenderDrawColor(renderer, 64, 64, 64, 255);	
-					//printf(":");
+					SDL_SetRenderDrawColor(renderer, 32, 32, 32, 128);	
+					printf(":");
 					break;
+				default:
 				case ocean:
-					maxRandomModifer = 1;
+					maxRandomModifer = 0;
 					islandBaseSize = 0;
 					numberOfIslands = 0;
-					SDL_SetRenderDrawColor(renderer, 32, 32, 32, 255);	
-					//printf("~");
+					SDL_SetRenderDrawColor(renderer, 16, 16, 16, 64);	
+					printf("~");
 					break;
-				
 			}
-			SDL_Rect rect = {LandmassX*landmassSize,LandmassY*landmassSize,landmassSize,landmassSize};
+			SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
 			SDL_RenderFillRect(renderer, &rect);
 			
 				// Generate islands
 			for (int i = 1; i <= numberOfIslands; i++) {
 				int islandSize = islandBaseSize+getRandomLimited(maxRandomModifer);
-				int x1 = LandmassX*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeX/(1+getRandomLimited(16)));
-				int y1 = LandmassY*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeY/(1+getRandomLimited(16)));
+				int x1 = landmassX*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeX/(1+getRandomLimited(16)));
+				int y1 = landmassY*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeY/(1+getRandomLimited(16)));
 				
 				//randomIsland(x1,y1,islandSize);
 				polygonIsland(x1,y1,islandSize);
 			}
 		}
-		SDL_RenderPresent(renderer);
-		//printf("\n");
+		printf("\n");
 	}
 	
 	// Biomes based on landmass
 	for (int biomeY = 0; biomeY < mapSizeY/biomeSize; biomeY++) {
+		updateProgressBar(scaleToValue(biomeY+1,mapSizeY/biomeSize,100),2);
 		for (int biomeX = 0; biomeX < mapSizeX/biomeSize; biomeX++) {
 			int biome = 0;
-			//printf("%d,", checkLandmass(biomeX*biomeSize,biomeY*biomeSize));
-			switch(checkLandmass(biomeX*biomeSize,biomeY*biomeSize)) {
+			//printf("%d,", checklandmass(biomeX*biomeSize,biomeY*biomeSize));
+			switch(checklandmass(biomeX*biomeSize,biomeY*biomeSize)) {
+				case mainland:
+					biome = mountains;
+					if (getRandomLimited(10)>7) {
+						biome = mountains;
+					} else {
+						biome = forest;
+					}
+					break;
 				case continent:
-					if (getRandomLimited(10)%2) {
+					if (getRandomLimited(10)>9) {
 						biome = mountains;
 						break;
 					}
 				default:
-					biome = grasslands;
 					biome = getRandomBiomeID();
 					switch(biome) {
-						case desert:
-							if (isNeighboringBiome(biomeX,biomeY,forest)) {
-								biome = grasslands;
-							}
-						case forest:
-							if (checkBiomeForTile(biomeX,biomeY,oceanTile)) {
+						case grasslands:
+							if ((biomeY > ((mapSizeY/biomeSize)/5)*2) && (biomeY < ((mapSizeY/biomeSize)/5)*3)) {
+								biome = desert;
 							} else {
-								biome = grasslands;
+								biome = forest;
 							}
 							break;
 						case beach:
+							if (!checkBiomeForTile(biomeX,biomeY,oceanTile)) {
+								biome = forest;
+							}
+							break;
+						case mountains:
 							if (checkBiomeForTile(biomeX,biomeY,oceanTile)) {
-							} else {
-								biome = desert;
+								biome = grasslands;
+							}
+							break;
+						case desert:
+							if (checkBiomeForTile(biomeX,biomeY,oceanTile)) {
+								// Jungle?
+								//biome = beach;
+							//} else if (isNeighboringBiome(biomeX,biomeY,forest)) {
+								biome = grasslands;
+							}
+							break;
+						case forest:
+							if (checkBiomeForTile(biomeX,biomeY,oceanTile)) {
+								biome = grasslands;
 							}
 							break;
 					}
@@ -670,7 +819,6 @@ int WinMain(int argc, char **argv) {
 			biomeMap[biomeX][biomeY] = biome;
 			renderBiome(biomeX,biomeY);
 		}
-		SDL_RenderPresent(renderer);
 		//printf("\n");
 	}
 	
@@ -702,31 +850,58 @@ int WinMain(int argc, char **argv) {
 				}
 				
 				// Actually put down tiles based on biomes
-				int biome = biomeMap[mapX>>3][mapY>>3];
-				// Randomly get tiles from adjacent Biomes
+				int biome = biomeMap[mapX/biomeSize][mapY/biomeSize];
 				// Find most common adjacent Biome
-				int countOfBiomes[numBiomes] = {0};
-				for (int y = -1+mapY; y < 1+mapY; y++) {
-					for (int x = -1+mapX; x < 1+mapX; x++) {
-						countOfBiomes[biomeMap[x>>3][y>>3]] += getRandomLimited(2);
+				int closestDistance = mapSizeX*mapSizeY;
+				int closestBiome = biome;
+				int biomeXpos = mapX/biomeSize;
+				int biomeYpos = mapY/biomeSize;	
+				SDL_SetRenderDrawColor(renderer, 255, 0, 0, 32);
+				// Biome Blending Priority?
+				if ((biome == mountains) || (biome == forest)) {
+					for (int yBiome = -1; yBiome <= 1; yBiome++) {
+						for (int xBiome = -1; xBiome <= 1; xBiome++) {
+							if ((xBiome == 0) && (yBiome == 0)) {
+								// Own Biome
+							} else {
+								/*SDL_RenderDrawLine(
+									renderer,
+									mapX,
+									mapY,
+									((biomeXpos+xBiome)*biomeSize)+biomeSize/2,
+									((biomeYpos+yBiome)*biomeSize)+biomeSize/2
+								);*/
+								// Get distance to next biome
+								int distance = getIntDistance(
+									mapX,
+									mapY,
+									((biomeXpos+xBiome)*biomeSize)+biomeSize/2,
+									((biomeYpos+yBiome)*biomeSize)+biomeSize/2
+								);
+								// Add non-linearity
+								if (distance < closestDistance) {
+									closestDistance = distance;
+									closestBiome = biomeMap[biomeXpos-(xBiome*-1)][biomeYpos-(yBiome*-1)];
+								}
+								//printf("%d:%d \n", biomeMap[biomeXpos-xBiome][biomeYpos-yBiome], distance);
+							}
+						}
+						//printf("\n");
 					}
-				}
-				
-				int mostProminentBiome = grasslands;
-				int countOfMostProminentBiome = 0;
-				for (int i = 0; i < numBiomes; i++) {
-					if (countOfBiomes[i] > countOfMostProminentBiome) {
-						countOfMostProminentBiome = countOfBiomes[i];
-						mostProminentBiome = i;
-					}
-				}
-				biome = mostProminentBiome;
+					//printf("Closest Biome: %d\n", closestBiome);
+					if (getIntDistance(mapX,mapY,((biomeXpos)*biomeSize)+biomeSize/2,((biomeYpos)*biomeSize)+biomeSize/2) > 4) {
+						if ((closestBiome == mountains) && (biome == forest)) {
+							closestBiome = forest;
+						}
+						biome = closestBiome;
+					}	
+				}			
 				
 				// Randomize a bit
-				if (getRandomLimited(2)%2) {
+				if (getRandomLimited(100)>98) {
 					int neighborBiomes[4];
 					for (int i = 0; i < 4; i++) {
-						neighborBiomes[i] = getNeighboringBiomes(mapX/8,mapY/8,i);
+						neighborBiomes[i] = getNeighboringBiomes(mapX/biomeSize,mapY/biomeSize,i);
 					}
 					biome = neighborBiomes[getRandomLimited(3)];
 				}
@@ -776,6 +951,7 @@ int WinMain(int argc, char **argv) {
 				}
 			}
 		}
+		//SDL_RenderPresent(renderer);
 	}
 	
 	// Print Map
