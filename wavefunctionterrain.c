@@ -537,17 +537,20 @@ int checklandmass(int x, int y) {
 }
 
 int getNeighboringBiomes(int x, int y, int direction) {
+	x = getWrappedAround(x,mapSizeX/biomeSize);
+	y = getWrappedAround(y,mapSizeY/biomeSize);
 	switch(direction) {
 		case 0:
-		return biomeMap[x][y-1]; // North
+			return biomeMap[x][y-1]; // North
 		case 1:
-		return biomeMap[x+1][y]; // East
+			return biomeMap[x+1][y]; // East
 		case 2:
-		return biomeMap[x][y+1]; // South
+			return biomeMap[x][y+1]; // South
 		case 3:
-		return biomeMap[x-1][y]; // West
+			return biomeMap[x-1][y]; // West
 		default:
-		printf("Invalid Direction\n");
+			printf("Invalid Direction\n");
+			return 0;
 	}
 }
 
@@ -648,13 +651,13 @@ void saveBMP(const char* filename) {
 }
 
 int getWrappedAround(int location, int maxValue) {
-    while (location < 0) {
+    /*while (location < 0) {
         location += maxValue;
     }
     while (location >= maxValue) {
         location -= maxValue;
-    }
-    return location;
+    }*/
+    return location%maxValue;
 }
 
 
@@ -921,7 +924,7 @@ int WinMain(int argc, char **argv) {
 			// NOTE: Due to switching away from 2D Arrays, all this and some stuff
 			// In the final generation step is broken
 			// Gotta love wrap-arounds!
-			/*if (biome == emptybiome) {
+			if (biome == emptybiome) {
 				switch(checklandmass(biomeX*biomeSize,biomeY*biomeSize)) {
 					case mainland:
 						biome = mountains;
@@ -963,7 +966,7 @@ int WinMain(int argc, char **argv) {
 								}
 								break;
 							case forest:
-								if (checkBiomeForTile(biomeX,biomeY,oceanTile) ||
+								/*if (checkBiomeForTile(biomeX,biomeY,oceanTile) ||
 									getNeighboringBiomes(biomeX,biomeY,0) == desert ||
 									getNeighboringBiomes(biomeX,biomeY,1) == desert ||
 									getNeighboringBiomes(biomeX,biomeY,2) == desert ||
@@ -971,13 +974,13 @@ int WinMain(int argc, char **argv) {
 									biome = grasslands;
 								} else {
 									biome = forest;
-								}
+								}*/
 								break;
 								
 						}
 						break;
 				}
-			}*/
+			}
 			biomeMap[biomeX][biomeY] = biome;
 			if (visual & biomeBit) {
 				renderBiome(biomeX,biomeY);
@@ -994,7 +997,7 @@ int WinMain(int argc, char **argv) {
 			int randomTile;
 			if (map[mapX][mapY] == emptyTile) {
 				// Get surrounding tiles				
-				/*if (getWrappedAround(mapX-1,mapSizeX)<0) {
+				if (getWrappedAround(mapX-1,mapSizeX)<0) {
 					surrounding[0] = emptyTile;
 				} else {
 					surrounding[0] = map[getWrappedAround(mapX-1,mapSizeX)][mapY];
@@ -1013,7 +1016,7 @@ int WinMain(int argc, char **argv) {
 					surrounding[3] = emptyTile;
 				} else {
 					surrounding[3] = map[mapX][getWrappedAround(mapY+1,mapSizeY)];
-				}*/
+				}
 				
 				// Actually put down tiles based on biomes
 				int biome = biomeMap[mapX/biomeSize][mapY/biomeSize];
@@ -1022,14 +1025,14 @@ int WinMain(int argc, char **argv) {
 				int closestBiome = biome;
 				int biomeXpos = mapX/biomeSize;
 				int biomeYpos = mapY/biomeSize;	
-				SDL_SetRenderDrawColor(renderer, 255, 0, 0, 32);
-				// Biome Blending Priority?
-				/*for (int yBiome = -1; yBiome <= 1; yBiome++) {
+				// Biome Blending Priority
+				for (int yBiome = -1; yBiome <= 1; yBiome++) {
 					for (int xBiome = -1; xBiome <= 1; xBiome++) {
 						if ((xBiome == 0) && (yBiome == 0)) {
 							// Own Biome
 						} else {
-							if (visual & biomeFinderBit) {
+							/*if (visual & biomeFinderBit) {
+								SDL_SetRenderDrawColor(renderer, 255, 0, 0, 32);
 								SDL_RenderDrawLine(
 									renderer,
 									mapX,
@@ -1037,20 +1040,21 @@ int WinMain(int argc, char **argv) {
 									((biomeXpos+xBiome)*biomeSize)+biomeSize/2,
 									((biomeYpos+yBiome)*biomeSize)+biomeSize/2
 								);
-							}
+							}*/
+							
+							// TODO: WRAPPED DISTANCE IS BROKEN!!!!!!
+							
 							// Get distance to next biome
 							int distance = getIntDistance(
 								mapX,
 								mapY,
-								((biomeXpos+xBiome)*biomeSize)+biomeSize/2,
-								((biomeYpos+yBiome)*biomeSize)+biomeSize/2
+								(getWrappedAround(biomeXpos+xBiome,mapSizeX/biomeSize)*biomeSize)+biomeSize/2,
+								(getWrappedAround(biomeYpos+yBiome,mapSizeY/biomeSize)*biomeSize)+biomeSize/2
 							);
-							// Add non-linearity
-							//distance = distance/;
 							// Check closest distance
 							if (distance < closestDistance) {
 								closestDistance = distance;
-								closestBiome = biomeMap[biomeXpos-(xBiome*-1)][biomeYpos-(yBiome*-1)];
+								closestBiome = biomeMap[getWrappedAround(biomeXpos-(xBiome*-1),mapSizeX/biomeSize)][getWrappedAround(biomeYpos-(yBiome*-1),mapSizeY/biomeSize)];
 							}
 							//printf("%d:%d \n", biomeMap[biomeXpos-xBiome][biomeYpos-yBiome], distance);
 						}
@@ -1058,11 +1062,11 @@ int WinMain(int argc, char **argv) {
 					//printf("\n");
 				}
 				//printf("Closest Biome: %d\n", closestBiome);
-				if (getIntDistance(mapX,mapY,((biomeXpos)*biomeSize)+biomeSize/2,((biomeYpos)*biomeSize)+biomeSize/2) > 3) {
+				if (wrapped_distance(mapX,mapY,((biomeXpos)*biomeSize)+biomeSize/2,((biomeYpos)*biomeSize)+biomeSize/2, mapSizeX, mapSizeY) > 3) {
 					if (biome < closestBiome) {
 						biome = closestBiome;
 					}
-				}		*/
+				}
 				
 				// Randomize a bit
 				// TODO: Check how close one is to the biome border
@@ -1075,7 +1079,7 @@ int WinMain(int argc, char **argv) {
 				}*/
 				
 				// Place tiles based on Biome
-				/*switch(biome) {
+				switch(biome) {
 					case beach:
 						randomTile = getRandomLimitedMinMax(oceanTile,sandTile);
 						placeTile(mapX,mapY,randomTile);
@@ -1123,7 +1127,7 @@ int WinMain(int argc, char **argv) {
 						placeTile(mapX,mapY,randomTile);
 						break;
 					
-				}*/
+				}
 			}
 		}
 	}
