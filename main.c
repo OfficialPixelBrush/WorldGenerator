@@ -34,9 +34,9 @@
 #define biomeBit 			16
 #define biomeFinderBit		32
 
-int** map;
-int** biomeMap;
-int** landmassMap;
+unsigned char** map;
+unsigned char** biomeMap;
+unsigned char** landmassMap;
 char textMode = 0;
 char bmpMode = 0;
 char visual = 0b11111111;
@@ -44,6 +44,7 @@ unsigned char r,g,b = 0;
 int tectonicPlates = 0;
 int mapSizeX, mapSizeY;
 int maximumVerticies;
+int initialSeed;
 
 // enums
 typedef enum {
@@ -81,6 +82,16 @@ typedef enum {
 	numTiles,
 } tilename;
 
+// NOTE: THIS ONLY ACCOUNT FOR A SINGLE WRAP AROUND, NOT MULTIPLE!!!!
+int getWrappedAround(int location, int maxValue) {
+	if (location < 0) {
+		location += maxValue;
+	} else if (location > maxValue) {
+		location = location%maxValue;
+	}
+    return location;//%maxValue;
+}
+
 // Get a random Tile ID
 int getRandomTileID() {
 	return rand() % numTiles;
@@ -105,8 +116,8 @@ int getRandomlandmassID() {
 
 int x,y = 0;
 int i = 0;
-int id = emptyTile;
-int surrounding[4] = {emptyTile,emptyTile,emptyTile,emptyTile};
+char id = emptyTile;
+char surrounding[4] = {emptyTile,emptyTile,emptyTile,emptyTile};
 int invalidTile = emptyTile;
 int previousRandomValues[20] = { 0 };
 SDL_Renderer *renderer;
@@ -265,11 +276,9 @@ int getRandomLimited(int max) {
 
 // Random with a minimum and maximum
 int getRandomLimitedMinMax(int min, int max) {
-	max = max+1;
-	int result = (rand() % max);
-	
-	if (result < min) {	result += min; }
-	return result;
+    max = max + 1; // Include the upper bound (max) in the range
+    int result = (rand() % (max - min)) + min;
+    return result;
 }
 
 // Smoothed Random Generator with a maximum value
@@ -290,31 +299,27 @@ float getSmoothedRandomLimited(int max, int smoothSteps) {
 	return smoothedValue/(float)smoothSteps;
 }
 
+// Both of these are broken!
+// Remove surrounding array!
 // Checks if another tile is surrounding the current tile at any other side
 int isNeighboring(int tile) {
-	if ((surrounding[0] == tile) || (surrounding[1] == tile) || (surrounding[2] == tile) || (surrounding[3] == tile)) {
+	return 0;
+	/*if ((surrounding[0] == tile) || (surrounding[1] == tile) || (surrounding[2] == tile) || (surrounding[3] == tile)) {
 		return 1;
 	} else {
 		return 0;
-	}
-}
-
-// Checks if another tile is surrounding the current tile at any other side
-int canNeighbor(int tile) {
-	if ((surrounding[0] == tile) || (surrounding[1] == tile) || (surrounding[2] == tile) || (surrounding[3] == tile)) {
-		return 1;
-	} else {
-		return 0;
-	}
+	}*/
 }
 
 // Checks to see if a tile is surrounded by another type of tile
 int surroundedBy(int tile) {
+	return 0;
+	/*
 	if ((surrounding[0] == tile) && (surrounding[1] == tile) && (surrounding[2] == tile) && (surrounding[3] == tile)) {
 		return 1;
 	} else {
 		return 0;
-	}
+	}*/
 }
 
 // The random island
@@ -537,7 +542,7 @@ int checklandmass(int x, int y) {
 }
 
 int getNeighboringBiomes(int x, int y, int direction) {
-	x = getWrappedAround(x,mapSizeX/biomeSize);
+	/*x = getWrappedAround(x,mapSizeX/biomeSize);
 	y = getWrappedAround(y,mapSizeY/biomeSize);
 	switch(direction) {
 		case 0:
@@ -551,7 +556,8 @@ int getNeighboringBiomes(int x, int y, int direction) {
 		default:
 			printf("Invalid Direction\n");
 			return 0;
-	}
+	}*/
+	return 0;
 }
 
 int renderBiome(int biomeX,int biomeY) {
@@ -593,6 +599,19 @@ int scaleToValue(int value, int maxValue, int desiredMax) {
 
 // Function to create and save as BMP file
 void saveBMP(const char* filename) {
+	/*
+	char str0[32];
+	char str1[32];
+	char str2[64];
+	char ending[4] = ".bmp";
+	sprintf(str0, "-%d-", mapSizeX);
+	sprintf(str1, "%d", mapSizeY);
+	sprintf(str2, "_%d_", initialSeed);
+	strcat(filename, str0);
+	strcat(filename, str1);
+	strcat(filename, str2);
+	strcat(filename, ending);
+	*/
     FILE* file = fopen(filename, "wb");
 
     if (!file) {
@@ -641,25 +660,16 @@ void saveBMP(const char* filename) {
     // Write image data (BGR format)
 	for (int i = 0; i < mapSizeX*mapSizeY; i++) {
 		printTile(i%mapSizeX,i/mapSizeY);
-		fwrite((char)b, sizeof(char), imageSize, file);
-		fwrite((char)g, sizeof(char), imageSize, file);
-		fwrite((char)r, sizeof(char), imageSize, file);
-		printf("%d,",i);
+        char pixel[3] = {
+            (char)(b),              // Blue component (LSB)
+            (char)(g >> 8),         // Green component
+            (char)(r >> 16)         // Red component (MSB)
+        };
+        fwrite(pixel, sizeof(char), 3, file);
 	}
 
     fclose(file);
 }
-
-int getWrappedAround(int location, int maxValue) {
-    /*while (location < 0) {
-        location += maxValue;
-    }
-    while (location >= maxValue) {
-        location -= maxValue;
-    }*/
-    return location%maxValue;
-}
-
 
 int WinMain(int argc, char **argv) {
 	// implement reading of parameters!!
@@ -669,26 +679,25 @@ int WinMain(int argc, char **argv) {
 	maximumVerticies = 30;
 	
 	// Initialize maps
-	map = (int**)malloc(mapSizeX * sizeof(int*));
+	map = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
     for (int i = 0; i < mapSizeX; i++) {
-        map[i] = (int*)malloc(mapSizeY * sizeof(int));
+        map[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
     }
 	
-	biomeMap = (int**)malloc(mapSizeX/biomeSize * sizeof(int*));
+	biomeMap = (unsigned char**)malloc(mapSizeX/biomeSize * sizeof(unsigned char*));
     for (int i = 0; i < mapSizeX/biomeSize; i++) {
-        biomeMap[i] = (int*)malloc(mapSizeY/biomeSize * sizeof(int));
+        biomeMap[i] = (unsigned char*)malloc(mapSizeY/biomeSize * sizeof(unsigned char));
     }
 	
-	landmassMap = (int**)malloc(mapSizeX/landmassSize * sizeof(int*));
+	landmassMap = (unsigned char**)malloc(mapSizeX/landmassSize * sizeof(unsigned char*));
     for (int i = 0; i < mapSizeX/landmassSize; i++) {
-        landmassMap[i] = (int*)malloc(mapSizeY/landmassSize * sizeof(int));
+        landmassMap[i] = (unsigned char*)malloc(mapSizeY/landmassSize * sizeof(unsigned char));
     }
 	
 	tectonicPlates = mapSizeX/(landmassSize*8);
 	
 	// SDL2 Prep
 	// Seed the map
-	int initialSeed;
 	float renderScale = 1.0f;
 	
 	// Initialize SDL
@@ -716,7 +725,7 @@ int WinMain(int argc, char **argv) {
 
     // Initial renderer color
 	restart:
-	initialSeed = 1689863712; //time(NULL);
+	initialSeed = time(NULL);
 	printf("%d\n",initialSeed);
 	srand(initialSeed);
     SDL_SetRenderDrawColor(renderer, 16, 16, 16, 255);	
@@ -728,6 +737,7 @@ int WinMain(int argc, char **argv) {
 			placeTile(x,y,oceanTile);
 		}
 	}
+	printf("Pregeneration\n");
 	
 	for (int i = 0; i < 20; i++) {
 		previousRandomValues[i] = getRandomLimited(5);
@@ -750,6 +760,7 @@ int WinMain(int argc, char **argv) {
 		tectonicPlatesOriginY[i] = (int)getRandomLimitedMinMax(mapSizeY/5,mapSizeY/5*4);
 		tectonicPlatesSize[i] = (int)getRandomLimitedMinMax(5,20);
 	}
+	printf("Tectonic Plate Points\n");
 	
 	// Tectonic Plate Visualzation
 	if (visual & tectonicPlateBit) {
@@ -833,6 +844,7 @@ int WinMain(int argc, char **argv) {
 			landmassMap[landmassX][landmassY] = landmass;
 		}
 	}
+	printf("Landmass Generation\n");
 	
 	// Generate Islands
 	for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
@@ -902,28 +914,28 @@ int WinMain(int argc, char **argv) {
 		}
 		printf("\n");
 	}
+	printf("Island Generation\n");
 	
 	// Biomes based on landmass
 	for (int biomeY = 0; biomeY < mapSizeY/biomeSize; biomeY++) {
 		updateProgressBar(scaleToValue(biomeY+1,mapSizeY/biomeSize,100),3);
 		for (int biomeX = 0; biomeX < mapSizeX/biomeSize; biomeX++) {
-			int biome = 0;
+			int biome = emptybiome;
 			//printf("%d,", checklandmass(biomeX*biomeSize,biomeY*biomeSize));	
 			// Basic Post-processing
-			if (getRandomLimited(2) + getIntDistance(biomeX,0,biomeX,biomeY) < ((mapSizeY/biomeSize)/5)) {
+			if ((getRandomLimited(1) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/5)) {
 				biome = snowy;
-			} else if (getRandomLimited(2) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY) < (((mapSizeY/biomeSize)/5))) {
+			}
+			if ((getRandomLimited(1) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/5))) {
 				biome = snowy;
 			}
 			
-			if ((biomeY+getRandomLimited(2) > ((mapSizeY/biomeSize)/5)*2) && (biomeY-getRandomLimited(2) < ((mapSizeY/biomeSize)/5)*3)) {
+			if ((biomeY + getRandomLimited(2) > ((mapSizeY/biomeSize)/5)*2)
+				&& (biomeY - getRandomLimited(2) < ((mapSizeY/biomeSize)/5)*3)) {
 				biome = desert;
 			}
 			
 			// Checks to ensure adjance Biomes don't fuck up
-			// NOTE: Due to switching away from 2D Arrays, all this and some stuff
-			// In the final generation step is broken
-			// Gotta love wrap-arounds!
 			if (biome == emptybiome) {
 				switch(checklandmass(biomeX*biomeSize,biomeY*biomeSize)) {
 					case mainland:
@@ -937,16 +949,11 @@ int WinMain(int argc, char **argv) {
 					case continent:
 						if (getRandomLimited(10)>9) {
 							biome = mountains;
-							break;
 						}
+						break;
 					default:
 						biome = getRandomBiomeID();
 						switch(biome) {
-							default:
-								biome = grasslands;
-								break;
-							case grasslands:
-								break;
 							case beach:
 								if (!checkBiomeForTile(biomeX,biomeY,oceanTile)) {
 									biome = forest;
@@ -966,7 +973,7 @@ int WinMain(int argc, char **argv) {
 								}
 								break;
 							case forest:
-								/*if (checkBiomeForTile(biomeX,biomeY,oceanTile) ||
+								if (checkBiomeForTile(biomeX,biomeY,oceanTile) ||
 									getNeighboringBiomes(biomeX,biomeY,0) == desert ||
 									getNeighboringBiomes(biomeX,biomeY,1) == desert ||
 									getNeighboringBiomes(biomeX,biomeY,2) == desert ||
@@ -974,9 +981,11 @@ int WinMain(int argc, char **argv) {
 									biome = grasslands;
 								} else {
 									biome = forest;
-								}*/
+								}
 								break;
-								
+							default:
+								biome = grasslands;
+								break;
 						}
 						break;
 				}
@@ -989,6 +998,7 @@ int WinMain(int argc, char **argv) {
 		//printf("\n");
 	}
 	SDL_RenderPresent(renderer);
+	printf("Biome Generation\n");
 	
 	// Prepare
 	for (int mapY = 0; mapY < mapSizeY; mapY++) {
@@ -996,27 +1006,16 @@ int WinMain(int argc, char **argv) {
 			//printf("Started: %d,%d\n", mapX, mapY);
 			int randomTile;
 			if (map[mapX][mapY] == emptyTile) {
-				// Get surrounding tiles				
-				if (getWrappedAround(mapX-1,mapSizeX)<0) {
-					surrounding[0] = emptyTile;
-				} else {
-					surrounding[0] = map[getWrappedAround(mapX-1,mapSizeX)][mapY];
-				}
-				if (getWrappedAround(mapX+1,mapSizeX) > mapSizeX) {
-					surrounding[1] = emptyTile;
-				} else {
-					surrounding[1] = map[getWrappedAround(mapX+1,mapSizeX)][mapY];
-				}
-				if (getWrappedAround(mapY-1,mapSizeY) < 0) {
-					surrounding[2] = emptyTile;
-				} else {
-					surrounding[2] = map[mapX][getWrappedAround(mapY-1,mapSizeY)];
-				}
-				if (getWrappedAround(mapY+1,mapSizeY) > mapSizeY) {
-					surrounding[3] = emptyTile;
-				} else {
-					surrounding[3] = map[mapX][getWrappedAround(mapY+1,mapSizeY)];
-				}
+				// Get surrounding tiles
+				// Unused right now
+				int mapXminus = getWrappedAround(mapX-1,mapSizeX);
+				int mapXplus = getWrappedAround(mapX+1,mapSizeX);
+				int mapYminus = getWrappedAround(mapY-1,mapSizeY);
+				int mapYplus = getWrappedAround(mapY+1,mapSizeY);
+				/*surrounding[0] = map[mapXminus][mapY];
+				surrounding[1] = map[mapXplus][mapY];
+				surrounding[2] = map[mapX][mapYminus];
+				surrounding[3] = map[mapX][mapYplus];*/
 				
 				// Actually put down tiles based on biomes
 				int biome = biomeMap[mapX/biomeSize][mapY/biomeSize];
@@ -1026,6 +1025,13 @@ int WinMain(int argc, char **argv) {
 				int biomeXpos = mapX/biomeSize;
 				int biomeYpos = mapY/biomeSize;	
 				// Biome Blending Priority
+				/*
+				Check surrounding tiles and smooth into closest one with higher priority
+				ooo
+				o.o
+				ooo
+				
+				*/
 				for (int yBiome = -1; yBiome <= 1; yBiome++) {
 					for (int xBiome = -1; xBiome <= 1; xBiome++) {
 						if ((xBiome == 0) && (yBiome == 0)) {
@@ -1042,9 +1048,8 @@ int WinMain(int argc, char **argv) {
 								);
 							}*/
 							
-							// TODO: WRAPPED DISTANCE IS BROKEN!!!!!!
-							
 							// Get distance to next biome
+							
 							int distance = getIntDistance(
 								mapX,
 								mapY,
@@ -1054,15 +1059,23 @@ int WinMain(int argc, char **argv) {
 							// Check closest distance
 							if (distance < closestDistance) {
 								closestDistance = distance;
-								closestBiome = biomeMap[getWrappedAround(biomeXpos-(xBiome*-1),mapSizeX/biomeSize)][getWrappedAround(biomeYpos-(yBiome*-1),mapSizeY/biomeSize)];
+								int closestBiomeX = getWrappedAround(biomeXpos-(xBiome*-1),mapSizeX/biomeSize);
+								int closestBiomeY = getWrappedAround(biomeYpos-(yBiome*-1),mapSizeY/biomeSize);
+								closestBiome = biomeMap[closestBiomeX][closestBiomeY];
 							}
 							//printf("%d:%d \n", biomeMap[biomeXpos-xBiome][biomeYpos-yBiome], distance);
 						}
 					}
-					//printf("\n");
 				}
 				//printf("Closest Biome: %d\n", closestBiome);
-				if (wrapped_distance(mapX,mapY,((biomeXpos)*biomeSize)+biomeSize/2,((biomeYpos)*biomeSize)+biomeSize/2, mapSizeX, mapSizeY) > 3) {
+				if (wrapped_distance(
+					mapX,
+					mapY,
+					((biomeXpos)*biomeSize)+biomeSize/3,
+					((biomeYpos)*biomeSize)+biomeSize/3,
+					mapSizeX,
+					mapSizeY
+				) > 4) {
 					if (biome < closestBiome) {
 						biome = closestBiome;
 					}
@@ -1085,11 +1098,7 @@ int WinMain(int argc, char **argv) {
 						placeTile(mapX,mapY,randomTile);
 						break;
 					case desert:
-						if (isNeighboring(emptyTile) || isNeighboring(sandTile)) {
-							placeTile(mapX,mapY,sandTile);
-						} else {
-							placeTile(mapX,mapY,grassTile);
-						}
+						placeTile(mapX,mapY,sandTile);
 						break;
 					default:
 					case grasslands:
@@ -1103,6 +1112,8 @@ int WinMain(int argc, char **argv) {
 					case forest:
 						if (isNeighboring(oceanTile)) {
 							randomTile = sandTile;
+						} else if (isNeighboring(grassTile)) {
+							randomTile = bushTile;
 						} else if (isNeighboring(bushTile)) {
 							randomTile = treeTile;
 						} else {
@@ -1126,15 +1137,15 @@ int WinMain(int argc, char **argv) {
 						}
 						placeTile(mapX,mapY,randomTile);
 						break;
-					
 				}
 			}
 		}
 	}
+	printf("Tile Placement\n");
 	
 	// Print Map
     char running = 1;
-	printMap();
+	//printMap();
 	
     // Clear screen	
     SDL_Event event;
@@ -1150,7 +1161,7 @@ int WinMain(int argc, char **argv) {
                 }    
                 if(strcmp(key, "W") == 0) {
 					bmpMode = 1;
-					saveBMP("map.bmp");
+					saveBMP("map");
 					bmpMode = 0;
                 }     
                 if(strcmp(key, "E") == 0) {
