@@ -752,7 +752,7 @@ int WinMain(int argc, char **argv) {
     // Initial renderer color
 	restart:
 	if (!animate) {
-		initialSeed = 1690361670; // time(NULL); // 1690274433;
+		initialSeed = time(NULL); //1690361670; // time(NULL); // 1690274433;
 	}
 	printf("%d\n",initialSeed);
 	srand(initialSeed);
@@ -896,7 +896,7 @@ int WinMain(int argc, char **argv) {
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 0;
 					SDL_SetRenderDrawColor(renderer, 192, 192, 192, 128);	
-					printf("^");
+					//printf("^");
 					break;
 				case continent:
 					maxRandomModifer = 10;
@@ -904,7 +904,7 @@ int WinMain(int argc, char **argv) {
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 1;
 					SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
-					printf("#");
+					//printf("#");
 					break;
 				case archipelago:
 					maxRandomModifer = 5;
@@ -912,7 +912,7 @@ int WinMain(int argc, char **argv) {
 					numberOfIslands = 2;
 					maxRandomIslandModifier = 1;
 					SDL_SetRenderDrawColor(renderer, 96, 96, 96, 128);	
-					printf("o");
+					//printf("o");
 					break;
 				case islands:
 					maxRandomModifer = 3;
@@ -920,7 +920,7 @@ int WinMain(int argc, char **argv) {
 					numberOfIslands = 2;
 					maxRandomIslandModifier = 2;
 					SDL_SetRenderDrawColor(renderer, 64, 64, 64, 128);	
-					printf(":");
+					//printf(":");
 					break;
 				default:
 				case ocean:
@@ -929,7 +929,7 @@ int WinMain(int argc, char **argv) {
 					numberOfIslands = 0;
 					maxRandomIslandModifier = 0;
 					SDL_SetRenderDrawColor(renderer, 16, 16, 16, 128);	
-					printf("~");
+					//printf("~");
 					break;
 			}
 			
@@ -949,7 +949,7 @@ int WinMain(int argc, char **argv) {
 				polygonIsland(x1,y1,islandSize);
 			}
 		}
-		printf("\n");
+		//printf("\n");
 	}
 	printf("Island Generation\n");
 	
@@ -1059,8 +1059,9 @@ int WinMain(int argc, char **argv) {
 			
 			// Actually put down tiles based on biomes
 			// lower resolution biome selection
-			int vagueBiomeX = (int)((float)mapX*sin((float)mapY/(float)mapSizeY*PI));
-			int biome = biomeMap[vagueBiomeX/biomeSize][mapY/biomeSize];
+			//int vagueBiomeX = (int)((float)mapX*sin((float)mapY/(float)mapSizeY*PI));
+			//int biome = biomeMap[vagueBiomeX/biomeSize][mapY/biomeSize];
+			int biome = biomeMap[mapX/biomeSize][mapY/biomeSize];
 			
 			// Find most common adjacent Biome
 			int closestDistance = mapSizeX*mapSizeY;
