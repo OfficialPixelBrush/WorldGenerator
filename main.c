@@ -40,18 +40,27 @@
 
 #define numberOfOldRandomValues 20
 
+struct biomeStruct {
+	unsigned char biomeID;
+	unsigned char biomeCenterOffsetX;
+	unsigned char biomeCenterOffsetY;
+};
+typedef struct biomeStruct biomeInfo;
+
 unsigned char** map;
-unsigned char** biomeMap;
+unsigned char** heightMap;
+biomeInfo** biomeMap;
 unsigned char** landmassMap;
 char textMode = 0;
 char bmpMode = 0;
-char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit | biomeBit | finalMapRender;
+char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
 unsigned char r,g,b = 0;
 int tectonicPlates = 0;
 int mapSizeX, mapSizeY;
 int maximumVerticies;
 int initialSeed;
 char animate = 0;
+int heighestHeight = 0;
 
 float biomeMapSizeX, biomeMapSizeY = 0;
 
@@ -237,7 +246,18 @@ int printTile(int x, int y) {
 	if (bmpMode) {
 		return 0;
 	} else {
-		SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+		// Shade
+		int height = heightMap[x][y];
+		/*float mutliplier = (float)height/(float)heighestHeight;
+		float finalR = (float)r/255.0f;
+		float finalG = (float)g/255.0f;
+		float finalB = (float)b/255.0f;
+		finalR *= mutliplier;
+		finalG *= mutliplier;
+		finalB *= mutliplier;*/
+		SDL_SetRenderDrawColor(renderer,0,0,0,255);
+		SDL_RenderDrawPoint(renderer, x, y);
+		SDL_SetRenderDrawColor(renderer,r,g,b,height*10);
 		SDL_RenderDrawPoint(renderer, x, y);
 	}	
 	return 0;
@@ -269,6 +289,15 @@ void placeTile(int x, int y, int tile) {
 	x = getWrappedAround(x,mapSizeX);
 	y = getWrappedAround(y,mapSizeY);
 	map[x][y] = tile;
+}
+
+void increaseHeightMap(int x, int y) {
+	x = getWrappedAround(x,mapSizeX);
+	y = getWrappedAround(y,mapSizeY);
+	heightMap[x][y]+=1;
+	if (heightMap[x][y] > heighestHeight) {
+		heighestHeight = heightMap[x][y];
+	}
 }
 
 // Place a tile on the map
@@ -487,6 +516,7 @@ void polygonIsland(int x1, int y1, float islandSize) {
 
 			if (isInside) {
 				placeTile(mapX, mapY, emptyTile);
+				increaseHeightMap(mapX, mapY);
 			}
 		}
 	}
@@ -548,16 +578,16 @@ int isNeighboringBiome(int x, int y, int biome) {
 	x = getWrappedAround(x,((int)biomeMapSizeX));
 	y = getWrappedAround(y,((int)biomeMapSizeY));
 	int neighboringOnSides;
-	if (biomeMap[x+1][y] == biome) {
+	if (biomeMap[x+1][y].biomeID == biome) {
 		neighboringOnSides++;
 	}
-	if (biomeMap[x][y+1] == biome) {
+	if (biomeMap[x][y+1].biomeID == biome) {
 		neighboringOnSides++;
 	}
-	if (biomeMap[x-1][y] == biome) {
+	if (biomeMap[x-1][y].biomeID == biome) {
 		neighboringOnSides++;
 	}
-	if (biomeMap[x][y-1] == biome) {
+	if (biomeMap[x][y-1].biomeID == biome) {
 		neighboringOnSides++;
 	}
 	return neighboringOnSides;
@@ -572,26 +602,37 @@ int checklandmass(int x, int y) {
 	return landmassMap[x][y];
 }
 
+// This segfaults a lot...
 int getNeighboringBiomes(int x, int y, int direction) {
-	x = getWrappedAround(x,mapSizeX/biomeSize);
-	y = getWrappedAround(y,mapSizeY/biomeSize);
+	printf("x: %d, y: %d, d: %d\n", x, y, direction);
 	switch(direction) {
 		case 0:
-			return biomeMap[x][y-1]; // North
+			// North
+			y-=1;
+			break;
 		case 1:
-			return biomeMap[x+1][y]; // East
+			// East
+			x+=1;
+			break;
 		case 2:
-			return biomeMap[x][y+1]; // South
+			// South
+			y+=1;
+			break;
 		case 3:
-			return biomeMap[x-1][y]; // West
+			// West
+			x-=1;
+			break;
 		default:
 			printf("Invalid Direction\n");
-			return 0;
+			break;
 	}
+	x = getWrappedAround(x,mapSizeX/biomeSize);
+	y = getWrappedAround(y,mapSizeY/biomeSize);
+	return biomeMap[x][y].biomeID;
 }
 
 int renderBiome(int biomeX,int biomeY) {
-	switch(biomeMap[biomeX][biomeY]) {
+	switch(biomeMap[biomeX][biomeY].biomeID) {
 		case emptybiome:
 			SDL_SetRenderDrawColor(renderer, 25, 25, 25, 128);	
 			break;
@@ -717,6 +758,7 @@ int WinMain(int argc, char **argv) {
 	mapSizeX = 1024;
 	mapSizeY = 512;
 	maximumVerticies = 25;
+	heighestHeight = 0;
 	
 	// Initialize maps
 	map = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
@@ -724,12 +766,17 @@ int WinMain(int argc, char **argv) {
         map[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
     }
 	
+	heightMap = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
+    for (int i = 0; i < mapSizeX; i++) {
+        heightMap[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
+    }
+	
 	biomeMapSizeX = (((float)mapSizeX)/((float)biomeSize))+0.5;
 	biomeMapSizeY = (((float)mapSizeY)/((float)biomeSize))+0.5;
 	
-	biomeMap = (unsigned char**)malloc((int)biomeMapSizeX * sizeof(unsigned char*));
+	biomeMap = (biomeInfo**)malloc((int)biomeMapSizeX * sizeof(biomeInfo*));
     for (int i = 0; i < mapSizeX/biomeSize; i++) {
-        biomeMap[i] = (unsigned char*)malloc((int)biomeMapSizeY * sizeof(unsigned char));
+        biomeMap[i] = (biomeInfo*)malloc((int)biomeMapSizeY * sizeof(biomeInfo));
     }
 	
 	landmassMap = (unsigned char**)malloc(mapSizeX/landmassSize * sizeof(unsigned char*));
@@ -770,7 +817,7 @@ int WinMain(int argc, char **argv) {
     // Initial renderer color
 	restart:
 	if (!animate) {
-		initialSeed = time(NULL); //1690361670; // time(NULL); // 1690274433;
+		initialSeed = time(NULL); // 1708518104 //1690361670; // time(NULL); // 1690274433;
 	}
 	printf("%d\n",initialSeed);
 	srand(initialSeed);
@@ -781,6 +828,7 @@ int WinMain(int argc, char **argv) {
 	for (y = 0; y < mapSizeY; y++) {
 		for (x = 0; x < mapSizeX; x++) {
 			placeTile(x,y,oceanTile);
+			heightMap[x][y] = 128;
 		}
 	}
 	printf("Pregeneration\n");
@@ -910,16 +958,16 @@ int WinMain(int argc, char **argv) {
 			// USE THIS TO MAKE CHUNKING POSSIBLE!!!!
 			switch(landmassMap[landmassX][landmassY]) {
 				case mainland:
-					maxRandomModifer = 3;
-					islandBaseSize = 7;
+					maxRandomModifer = 7;
+					islandBaseSize = 13;
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 0;
 					SDL_SetRenderDrawColor(renderer, 192, 192, 192, 128);	
 					//printf("^");
 					break;
 				case continent:
-					maxRandomModifer = 7;
-					islandBaseSize = 4;
+					maxRandomModifer = 4;
+					islandBaseSize = 6;
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 1;
 					SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
@@ -960,7 +1008,7 @@ int WinMain(int argc, char **argv) {
 			// Generate islands
 			int maximumNumberOfIslands = numberOfIslands + getRandomLimited(maxRandomIslandModifier);
 			for (int i = 1; i <= maximumNumberOfIslands; i++) {
-				int islandSize = islandBaseSize+getRandomLimited(maxRandomModifer);
+				float islandSize = islandBaseSize+getRandomLimited(maxRandomModifer);
 				int x1 = landmassX*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeX/(1+getRandomLimited(16)));
 				int y1 = landmassY*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeY/(1+getRandomLimited(16)));
 				
@@ -985,12 +1033,14 @@ int WinMain(int argc, char **argv) {
 		printf("%d\n",biomeY);
 		for (int biomeX = 0; biomeX < mapSizeX/biomeSize; biomeX++) {
 			int biome = emptybiome;
+			int biomeXOffset = biomeSize/3 + getRandomLimited(biomeSize/2);
+			int biomeYOffset = biomeSize/3 + getRandomLimited(biomeSize/2);
 			//printf("%d,", checklandmass(biomeX*biomeSize,biomeY*biomeSize));	
 			// Basic Post-processing
-			if ((getSmoothedRandomLimited(4,5) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/6)) {
+			if ((getSmoothedRandomLimited(3,5) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/6)) {
 				biome = tundra;
 			}
-			if ((getSmoothedRandomLimited(4,5) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/6))) {
+			if ((getSmoothedRandomLimited(3,5) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/6))) {
 				biome = tundra;
 			}
 			
@@ -1054,7 +1104,9 @@ int WinMain(int argc, char **argv) {
 						break;
 				}
 			}
-			biomeMap[biomeX][biomeY] = biome;
+			biomeMap[biomeX][biomeY].biomeID = biome;
+			biomeMap[biomeX][biomeY].biomeCenterOffsetX = biomeXOffset;
+			biomeMap[biomeX][biomeY].biomeCenterOffsetY = biomeYOffset;
 			if (visual & biomeBit) {
 				renderBiome(biomeX,biomeY);
 			}
@@ -1087,13 +1139,13 @@ int WinMain(int argc, char **argv) {
 			// lower resolution biome selection
 			//int vagueBiomeX = (int)((float)mapX*sin((float)mapY/(float)mapSizeY*PI));
 			//int biome = biomeMap[vagueBiomeX/biomeSize][mapY/biomeSize];
-			int biome = biomeMap[mapX/biomeSize][mapY/biomeSize];
+			int biome = biomeMap[mapX/biomeSize][mapY/biomeSize].biomeID;
 			
 			// Find most common adjacent Biome
 			int closestDistance = mapSizeX*mapSizeY;
 			int closestBiome = biome;
 			int biomeXpos = mapX/biomeSize;
-			int biomeYpos = mapY/biomeSize;	
+			int biomeYpos = mapY/biomeSize;
 			// Biome Blending Priority
 			/*
 			Check surrounding tiles and smooth into closest one with higher priority
@@ -1113,8 +1165,8 @@ int WinMain(int argc, char **argv) {
 								renderer,
 								mapX,
 								mapY,
-								((biomeXpos+xBiome)*biomeSize)+biomeSize/2,
-								((biomeYpos+yBiome)*biomeSize)+biomeSize/2
+								((biomeXpos+xBiome)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetX,
+								((biomeYpos+yBiome)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetY
 							);
 						}
 						
@@ -1123,16 +1175,16 @@ int WinMain(int argc, char **argv) {
 						int distance = getIntDistance(
 							mapX,
 							mapY,
-							(getWrappedAround(biomeXpos+xBiome,mapSizeX/biomeSize)*biomeSize)+biomeSize/2,
-							(getWrappedAround(biomeYpos+yBiome,mapSizeY/biomeSize)*biomeSize)+biomeSize/2
+							(getWrappedAround(biomeXpos+xBiome,mapSizeX/biomeSize)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetX,
+							(getWrappedAround(biomeYpos+yBiome,mapSizeY/biomeSize)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetY
 						);
-						distance+= getSmoothedRandomLimited(biomeSize,3);
+						distance+= getRandomLimited(biomeSize/2);
 						// Check closest distance
 						if (distance < closestDistance) {
 							closestDistance = distance;
 							int closestBiomeX = getWrappedAround(biomeXpos-(xBiome*-1),mapSizeX/biomeSize);
 							int closestBiomeY = getWrappedAround(biomeYpos-(yBiome*-1),mapSizeY/biomeSize);
-							closestBiome = biomeMap[closestBiomeX][closestBiomeY];
+							closestBiome = biomeMap[closestBiomeX][closestBiomeY].biomeID;
 						}
 						//printf("%d:%d \n", biomeMap[biomeXpos-xBiome][biomeYpos-yBiome], distance);
 					}
