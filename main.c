@@ -26,7 +26,7 @@
 // 6 Water
 // 7 Stone
 #define biomeSize 16
-#define landmassSize 32
+#define landmassSize 16
 #define PI 3.14159265359
 
 #define tectonicPlateBit  	1
@@ -38,18 +38,22 @@
 #define finalMapRender		64
 #define nothingYet 			128
 
+#define numberOfOldRandomValues 20
+
 unsigned char** map;
 unsigned char** biomeMap;
 unsigned char** landmassMap;
 char textMode = 0;
 char bmpMode = 0;
-char visual = 0b00010110;
+char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit | biomeBit | finalMapRender;
 unsigned char r,g,b = 0;
 int tectonicPlates = 0;
 int mapSizeX, mapSizeY;
 int maximumVerticies;
 int initialSeed;
 char animate = 0;
+
+float biomeMapSizeX, biomeMapSizeY = 0;
 
 // enums
 typedef enum {
@@ -126,7 +130,7 @@ int i = 0;
 char id = emptyTile;
 char surrounding[4] = {emptyTile,emptyTile,emptyTile,emptyTile};
 int invalidTile = emptyTile;
-int previousRandomValues[20] = { 0 };
+int previousRandomValues[numberOfOldRandomValues] = { 0 };
 SDL_Renderer *renderer;
 
 int updateProgressBar(int progress, int mode) {
@@ -310,13 +314,13 @@ int getRandomLimitedMinMax(int min, int max) {
 // Used to make random values less... random?
 float getSmoothedRandomLimited(int max, int smoothSteps) {
 	float smoothedValue = 0.0f;
-	for (int i = 1; i < 8; i++) {
+	for (int i = 1; i < numberOfOldRandomValues; i++) {
 		//printf("%d -> %d\n",previousRandomValues[i],previousRandomValues[i+1]);
 		previousRandomValues[i] = previousRandomValues[i+1];
 	}
-	previousRandomValues[8] = rand() % max;
+	previousRandomValues[numberOfOldRandomValues] = rand() % max;
 	
-	for (int i = 8; i > 8-smoothSteps; i--) {
+	for (int i = numberOfOldRandomValues; i > numberOfOldRandomValues-smoothSteps; i--) {
 		smoothedValue+=(float)previousRandomValues[i];
 	}
 	//printf("%f\n",smoothedValue/(float)smoothSteps);
@@ -347,7 +351,8 @@ int surroundedBy(int tile) {
 // The random island
 // aka the algorithm I used to shape islands previously
 // leaving it here in case I ever find a use for it!
-void randomIsland(int x1, int y1, int islandSize) {
+void randomIsland(int x1, int y1, float islandSize) {
+	islandSize *= (float)(getRandomLimited(10))/7.0f;
 	for (y = 0; y < mapSizeY; y++) {
 		for (x = 0; x < mapSizeX; x++) {
 			int x2 = x;
@@ -356,6 +361,7 @@ void randomIsland(int x1, int y1, int islandSize) {
 			// Generate Water Circle
 			if (distanceToIslandCenter < islandSize*(getRandomLimited(5))) {
 				map[x2][y2] = emptyTile;
+				SDL_RenderDrawPoint(renderer, x, y);
 			}
 		}
 	}
@@ -435,7 +441,7 @@ void plotLine(int x0, int y0, int x1, int y1, int tile) {
  These create points around a circle,
  then randomly push that out to create islands of various sizes
 */
-void polygonIsland(int x1, int y1, int islandSize) {
+void polygonIsland(int x1, int y1, float islandSize) {
 	// Set number of points along circle
 	float* polygonX = (float*)malloc(maximumVerticies * sizeof(float));;
 	float* polygonY = (float*)malloc(maximumVerticies * sizeof(float));;
@@ -445,9 +451,10 @@ void polygonIsland(int x1, int y1, int islandSize) {
 
 	// Set random displacements of points
 	for (int pointID = 0; pointID < maximumVerticies; pointID++) {
+		//printf("%d/%d\n", pointID, maximumVerticies);
 		// Interpolate continent outline between points
-		float x2 = cos(currentAngle) * (float)islandSize * getSmoothedRandomLimited(5, 10) + (float)x1;
-		float y2 = sin(currentAngle) * (float)islandSize * getSmoothedRandomLimited(5, 10) + (float)y1;
+		float x2 = cos(currentAngle) * islandSize * getSmoothedRandomLimited(5, 10) + (float)x1;
+		float y2 = sin(currentAngle) * islandSize * getSmoothedRandomLimited(5, 10) + (float)y1;
 		polygonX[pointID] = x2;
 		polygonY[pointID] = y2;
 		
@@ -538,8 +545,8 @@ int checkBiomeForTile(int x, int y,int tile) {
 
 // Checks if it's neighboring a biome
 int isNeighboringBiome(int x, int y, int biome) {
-	x = getWrappedAround(x,(mapSizeX/biomeSize));
-	y = getWrappedAround(y,(mapSizeY/biomeSize));
+	x = getWrappedAround(x,((int)biomeMapSizeX));
+	y = getWrappedAround(y,((int)biomeMapSizeY));
 	int neighboringOnSides;
 	if (biomeMap[x+1][y] == biome) {
 		neighboringOnSides++;
@@ -649,49 +656,57 @@ void saveBMP() {
 
     uint32_t imageSize = mapSizeX * mapSizeY * 3;
     uint32_t headerSize = 54;
-    uint32_t fileSize = imageSize + headerSize;
+    uint32_t fileSize = imageSize + headerSize;+
+	printf("Filesize: %d", fileSize);
 
     // BMP file header
-    uint8_t header[54] = {
+    uint8_t header[53] = {
         'B', 'M',                 // BMP signature
-        (uint8_t)(fileSize),      // File size
-        (uint8_t)(fileSize >> 8),
-        (uint8_t)(fileSize >> 16),
-        (uint8_t)(fileSize >> 24),
+        (uint8_t)(fileSize & 0xFF),      // File size
+        (uint8_t)(fileSize >> 8 & 0xFF),
+        (uint8_t)(fileSize >> 16 & 0xFF),
+        (uint8_t)(fileSize >> 24 & 0xFF),
         0, 0, 0, 0,              // Reserved
-        headerSize, 0, 0, 0,     // Image data offset
+        headerSize, 0, 0, 0,     // Image data offset ; 14 bytes up to this point
         40, 0, 0, 0,             // DIB header size
-        (uint8_t)(mapSizeX),        // Image width
-        (uint8_t)(mapSizeX >> 8),
-        (uint8_t)(mapSizeX >> 16),
-        (uint8_t)(mapSizeX >> 24),
-        (uint8_t)(mapSizeY),       // Image height
-        (uint8_t)(mapSizeY >> 8),
-        (uint8_t)(mapSizeY >> 16),
-        (uint8_t)(mapSizeY >> 24),
+        (uint8_t)(mapSizeX & 0xFF),        // Image width
+        (uint8_t)(mapSizeX >> 8 & 0xFF),
+        (uint8_t)(mapSizeX >> 16 & 0xFF),
+        (uint8_t)(mapSizeX >> 24 & 0xFF),
+        (uint8_t)(mapSizeY & 0xFF),       // Image height
+        (uint8_t)(mapSizeY >> 8 & 0xFF),
+        (uint8_t)(mapSizeY >> 16 & 0xFF),
+        (uint8_t)(mapSizeY >> 24 & 0xFF),
         1, 0,                    // Number of color planes
         24, 0,                   // Bits per pixel (24-bit color)
         0, 0, 0, 0,              // Compression method
-        (uint8_t)(imageSize),    // Image size
-        (uint8_t)(imageSize >> 8),
-        (uint8_t)(imageSize >> 16),
-        (uint8_t)(imageSize >> 24),
-        0, 0, 0, 0,              // Horizontal resolution (pixels per meter)
-        0, 0, 0, 0,              // Vertical resolution (pixels per meter)
+        //0, 0, 0, 0,              // Image size, a dummy 0 can be given for BI_RGB bitmaps.
+        (uint8_t)(imageSize & 0xFF),    // Image size
+        (uint8_t)(imageSize >> 8 & 0xFF),
+        (uint8_t)(imageSize >> 16 & 0xFF),
+        (uint8_t)(imageSize >> 24 & 0xFF),
+        0x13, 0x0B, 0, 0,              // Horizontal resolution (pixels per meter)
+        0x13, 0x0B, 0, 0,              // Vertical resolution (pixels per meter)
         0, 0, 0, 0,              // Number of colors in the color palette
         0, 0, 0, 0,              // Number of important colors used
     };
 
     // Write the BMP file header
-    fwrite(header, sizeof(uint8_t), 54, file);
+    fwrite(header, sizeof(uint8_t), headerSize, file);
 
     // Write image data (BGR format)
-    for (int i = 0; i < mapSizeX * mapSizeY; i++) {
-        // Assuming r, g, and b represent the red, green, and blue components respectively for each pixel.
-		printTile(i%mapSizeX,i/mapSizeY);
-        char pixel[3] = {b,g,r};
-        fwrite(pixel, sizeof(char), 3, file);
-    }
+	for (int y = 0; y < mapSizeY; y++) {
+		for (int x = 0; x < mapSizeX; x++) {
+			// Assuming r, g, and b represent the red, green, and blue components respectively for each pixel.
+			printTile(x,y);
+			char pixel[3] = {b,g,r};
+			fwrite(pixel, sizeof(char), 3, file);
+		}
+		// Padding bytes
+		for (int i = 0; i < mapSizeX*3%4; i++) {
+			fputc(0,file);
+		}
+	}
 
     fclose(file);
 }
@@ -709,9 +724,12 @@ int WinMain(int argc, char **argv) {
         map[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
     }
 	
-	biomeMap = (unsigned char**)malloc(mapSizeX/biomeSize * sizeof(unsigned char*));
+	biomeMapSizeX = (((float)mapSizeX)/((float)biomeSize))+0.5;
+	biomeMapSizeY = (((float)mapSizeY)/((float)biomeSize))+0.5;
+	
+	biomeMap = (unsigned char**)malloc((int)biomeMapSizeX * sizeof(unsigned char*));
     for (int i = 0; i < mapSizeX/biomeSize; i++) {
-        biomeMap[i] = (unsigned char*)malloc(mapSizeY/biomeSize * sizeof(unsigned char));
+        biomeMap[i] = (unsigned char*)malloc((int)biomeMapSizeY * sizeof(unsigned char));
     }
 	
 	landmassMap = (unsigned char**)malloc(mapSizeX/landmassSize * sizeof(unsigned char*));
@@ -719,7 +737,7 @@ int WinMain(int argc, char **argv) {
         landmassMap[i] = (unsigned char*)malloc(mapSizeY/landmassSize * sizeof(unsigned char));
     }
 	
-	tectonicPlates = mapSizeX/(landmassSize*8);
+	tectonicPlates = 20; //mapSizeX/(landmassSize*(2+(getRandomLimited(10))));
 	
 	// SDL2 Prep
 	// Seed the map
@@ -767,7 +785,7 @@ int WinMain(int argc, char **argv) {
 	}
 	printf("Pregeneration\n");
 	
-	for (int i = 0; i < 20; i++) {
+	for (int i = 0; i < numberOfOldRandomValues; i++) {
 		previousRandomValues[i] = getRandomLimited(5);
 	}
 	
@@ -786,7 +804,7 @@ int WinMain(int argc, char **argv) {
 	for (int i = 0; i < tectonicPlates; i++) {
 		tectonicPlatesOriginX[i] = (int)getRandomLimited(mapSizeX);
 		tectonicPlatesOriginY[i] = (int)getRandomLimitedMinMax(mapSizeY/5,mapSizeY/5*4);
-		tectonicPlatesSize[i] = (int)getRandomLimitedMinMax(5,20);
+		tectonicPlatesSize[i] = (int)getRandomLimitedMinMax(1,15);
 	}
 	printf("Tectonic Plate Points\n");
 	
@@ -820,7 +838,7 @@ int WinMain(int argc, char **argv) {
 	
 	int numberOfIslands = 10;
 	int islandBaseSize = 3;
-	int maxRandomModifer = 16;
+	int maxRandomModifer = 10;
 	int maxRandomIslandModifier = 0;
 	// landmass
 	
@@ -834,6 +852,7 @@ int WinMain(int argc, char **argv) {
 			// Then concrete ones based on tectonic plates
 			for (int i = 0; i < tectonicPlates; i++) {
 				int value = wrapped_distance(landmassX*landmassSize,landmassY*landmassSize,tectonicPlatesOriginX[i],tectonicPlatesOriginY[i],mapSizeX,mapSizeY);
+				value += getRandomLimited(20);
 				if (value < closest) {
 					closestPoint = i;
 					closest = value;
@@ -884,30 +903,30 @@ int WinMain(int argc, char **argv) {
 	printf("Landmass Generation\n");
 	
 	// Generate Islands
-	for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
-		//updateProgressBar(scaleToValue(landmassY,mapSizeY/landmassSize,100),2);
-		for (int landmassX = 0; landmassX < mapSizeX/landmassSize; landmassX++) {
-			updateProgressBar(scaleToValue(landmassY*(mapSizeX/landmassSize)+landmassX,(mapSizeY/landmassSize)*(mapSizeX/landmassSize),100),1);
+	//updateProgressBar(scaleToValue(landmassY,mapSizeY/landmassSize,100),2);
+	for (int landmassX = 0; landmassX < mapSizeX/landmassSize; landmassX++) {
+		for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
+		updateProgressBar(scaleToValue(landmassX*(mapSizeY/landmassSize)+landmassY,(mapSizeX/landmassSize)*(mapSizeY/landmassSize),100),1);
 			// USE THIS TO MAKE CHUNKING POSSIBLE!!!!
 			switch(landmassMap[landmassX][landmassY]) {
 				case mainland:
-					maxRandomModifer = 6;
-					islandBaseSize = 12;
+					maxRandomModifer = 3;
+					islandBaseSize = 7;
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 0;
 					SDL_SetRenderDrawColor(renderer, 192, 192, 192, 128);	
 					//printf("^");
 					break;
 				case continent:
-					maxRandomModifer = 10;
-					islandBaseSize = 10;
+					maxRandomModifer = 7;
+					islandBaseSize = 4;
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 1;
 					SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
 					//printf("#");
 					break;
 				case archipelago:
-					maxRandomModifer = 5;
+					maxRandomModifer = 2;
 					islandBaseSize = 2;
 					numberOfIslands = 2;
 					maxRandomIslandModifier = 1;
@@ -915,7 +934,7 @@ int WinMain(int argc, char **argv) {
 					//printf("o");
 					break;
 				case islands:
-					maxRandomModifer = 3;
+					maxRandomModifer = 1;
 					islandBaseSize = 1;
 					numberOfIslands = 2;
 					maxRandomIslandModifier = 2;
@@ -945,8 +964,15 @@ int WinMain(int argc, char **argv) {
 				int x1 = landmassX*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeX/(1+getRandomLimited(16)));
 				int y1 = landmassY*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeY/(1+getRandomLimited(16)));
 				
-				//randomIsland(x1,y1,islandSize);
-				polygonIsland(x1,y1,islandSize);
+				if (rand()%4) {
+					// Polygon Island
+					//printf("Poly\n");
+					polygonIsland(x1,y1,islandSize);
+				} else {
+					// Random Island
+					//printf("Random\n");
+					//randomIsland(x1,y1,islandSize/2);
+				}
 			}
 		}
 		//printf("\n");
@@ -961,10 +987,10 @@ int WinMain(int argc, char **argv) {
 			int biome = emptybiome;
 			//printf("%d,", checklandmass(biomeX*biomeSize,biomeY*biomeSize));	
 			// Basic Post-processing
-			if ((getRandomLimited(1) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/6)) {
+			if ((getSmoothedRandomLimited(4,5) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/6)) {
 				biome = tundra;
 			}
-			if ((getRandomLimited(1) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/6))) {
+			if ((getSmoothedRandomLimited(4,5) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/6))) {
 				biome = tundra;
 			}
 			
@@ -1100,6 +1126,7 @@ int WinMain(int argc, char **argv) {
 							(getWrappedAround(biomeXpos+xBiome,mapSizeX/biomeSize)*biomeSize)+biomeSize/2,
 							(getWrappedAround(biomeYpos+yBiome,mapSizeY/biomeSize)*biomeSize)+biomeSize/2
 						);
+						distance+= getSmoothedRandomLimited(biomeSize,3);
 						// Check closest distance
 						if (distance < closestDistance) {
 							closestDistance = distance;
