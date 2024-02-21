@@ -248,16 +248,22 @@ int printTile(int x, int y) {
 	} else {
 		// Shade
 		int height = heightMap[x][y];
-		/*float mutliplier = (float)height/(float)heighestHeight;
+		float multiplier = (float)height/(float)heighestHeight;
+		multiplier = 0.5f + multiplier/2;
 		float finalR = (float)r/255.0f;
 		float finalG = (float)g/255.0f;
 		float finalB = (float)b/255.0f;
-		finalR *= mutliplier;
-		finalG *= mutliplier;
-		finalB *= mutliplier;*/
-		SDL_SetRenderDrawColor(renderer,0,0,0,255);
-		SDL_RenderDrawPoint(renderer, x, y);
-		SDL_SetRenderDrawColor(renderer,r,g,b,height*10);
+		finalR *= multiplier;
+		finalG *= multiplier;
+		finalB *= multiplier;
+		finalR *= 255.0f;
+		finalG *= 255.0f;
+		finalB *= 255.0f;
+		//SDL_SetRenderDrawColor(renderer,0,0,0,255);
+		//SDL_RenderDrawPoint(renderer, x, y);
+		//printf("h: %d/%d, m: %f, r: %f, g: %f, b: %f\n", height, heighestHeight, multiplier, finalR, finalG, finalB);
+		//printf("%d, %d, %d\n", ((int)finalR)&0xFF,((int)finalG)&0xFF,((int)finalB)&0xFF);
+		SDL_SetRenderDrawColor(renderer,((int)finalR)&0xFF,((int)finalG)&0xFF,((int)finalB)&0xFF,255);
 		SDL_RenderDrawPoint(renderer, x, y);
 	}	
 	return 0;
@@ -604,7 +610,7 @@ int checklandmass(int x, int y) {
 
 // This segfaults a lot...
 int getNeighboringBiomes(int x, int y, int direction) {
-	printf("x: %d, y: %d, d: %d\n", x, y, direction);
+	//printf("x: %d, y: %d, d: %d\n", x, y, direction);
 	switch(direction) {
 		case 0:
 			// North
@@ -758,7 +764,7 @@ int WinMain(int argc, char **argv) {
 	mapSizeX = 1024;
 	mapSizeY = 512;
 	maximumVerticies = 25;
-	heighestHeight = 0;
+	heighestHeight = 1;
 	
 	// Initialize maps
 	map = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
@@ -828,7 +834,7 @@ int WinMain(int argc, char **argv) {
 	for (y = 0; y < mapSizeY; y++) {
 		for (x = 0; x < mapSizeX; x++) {
 			placeTile(x,y,oceanTile);
-			heightMap[x][y] = 128;
+			heightMap[x][y] = 1;
 		}
 	}
 	printf("Pregeneration\n");
@@ -867,6 +873,7 @@ int WinMain(int argc, char **argv) {
 				for (int k = 0; k < tectonicPlates; k++) {
 					int value = wrapped_distance(x,y,tectonicPlatesOriginX[k],tectonicPlatesOriginY[k],mapSizeX,mapSizeY);
 					if (value < closest) {
+						// TODO: try farthest!!
 						closestPoint = k;
 						closest = value;
 					}
