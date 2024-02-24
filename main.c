@@ -53,7 +53,6 @@ int** heightMap;
 biomeInfo** biomeMap;
 unsigned char** landmassMap;
 char textMode = 0;
-char bmpMode = 0;
 char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
 unsigned char r,g,b = 0;
 int tectonicPlates = 0;
@@ -62,7 +61,12 @@ int maximumVerticies;
 int initialSeed;
 char animate = 0;
 int heighestHeight = 0;
-int deepestDepth = 0;
+int deepestDepth = -255;
+
+// Export Options
+char bmpMode = 0;
+char heightmapExport = 0;
+char albedoExport = 0;
 
 float biomeMapSizeX, biomeMapSizeY = 0;
 
@@ -251,73 +255,104 @@ int printTile(int x, int y) {
 			break;
 	};
 	// Shade
-	// TODO: Adjust back to working values
-	float height = (float)heightMap[x][y];
-	//height = 0.5f + height/2;
-	float finalR = (float)r/255.0f;
-	float finalG = (float)g/255.0f;
-	float finalB = (float)b/255.0f;
-	finalR *= height;
-	finalG *= height;
-	finalB *= height;
-	finalR *= 255.0f;
-	finalG *= 255.0f;
-	finalB *= 255.0f;
-	r = ((int)finalR)&0xFF;
-	g = ((int)finalG)&0xFF;
-	b = ((int)finalB)&0xFF;
-	if (bmpMode) {
-		return 0;
-	} else {
-		//SDL_SetRenderDrawColor(renderer,0,0,0,255);
-		//SDL_RenderDrawPoint(renderer, x, y);
-		//printf("h: %d/%d, m: %f, r: %f, g: %f, b: %f\n", height, heighestHeight, multiplier, finalR, finalG, finalB);
-		//printf("%d, %d, %d\n", ((int)finalR)&0xFF,((int)finalG)&0xFF,((int)finalB)&0xFF);
+	if (!albedoExport) {
+		float height = (((float)heightMap[x][y])/255.0f);
+		float finalR = (float)r/255.0f;
+		float finalG = (float)g/255.0f;
+		float finalB = (float)b/255.0f;
+		finalR *= height;
+		finalG *= height;
+		finalB *= height;
+		r = ((int)(finalR*255.0f))&0xFF;
+		g = ((int)(finalG*255.0f))&0xFF;
+		b = ((int)(finalB*255.0f))&0xFF;
+	}
+	if (heightmapExport) {
+		r = heightMap[x][y];
+		g = heightMap[x][y];
+		b = heightMap[x][y];
+	}
+
+	if (!bmpMode) {
 		SDL_SetRenderDrawColor(renderer,r,g,b,255);
 		SDL_RenderDrawPoint(renderer, x, y);
 	}	
 	return 0;
 }
 
-// This'll be a lazy Box blur
-int blurHeightmap(int blurRadius) {
-	float** blurredHeightMap;
-	blurredHeightMap = (float**)malloc(mapSizeX * sizeof(float*));
-    for (int i = 0; i < mapSizeX; i++) {
-        blurredHeightMap[i] = (float*)malloc(mapSizeY * sizeof(float));
-    }
-	
-	// Render Heightmap
+int normalizeHeightmap() {
 	for (int y = 0; y < mapSizeY; y++) {
 		for (int x = 0; x < mapSizeX; x++) {
-			unsigned char currentCol = (unsigned char)(heightMap[x][y]*255.0f);
-			SDL_SetRenderDrawColor(renderer, currentCol,currentCol,currentCol,255);
+			int height = heightMap[x][y];
+			float relativeHeight = 0;
+			if (height >= 0) {
+				relativeHeight = (float)height/(float)heighestHeight;
+			} else {
+				relativeHeight = ((float)height/(float)deepestDepth)*-1;
+			}
+			relativeHeight = (relativeHeight/2)+0.5f;
+			heightMap[x][y] = (int)(relativeHeight*255.0f);
+			SDL_SetRenderDrawColor(renderer, heightMap[x][y],heightMap[x][y],heightMap[x][y],255);
 			SDL_RenderDrawPoint(renderer, x, y);
 		}
 	}
+	SDL_RenderPresent(renderer);
+}
+
+int addNoiseToHeightmap(int noiseIntensity) {
+	for (int y = 0; y < mapSizeY; y++) {
+		for (int x = 0; x < mapSizeX; x++) {
+			heightMap[x][y] += (rand()%noiseIntensity)-(noiseIntensity/2);
+			if (heightMap[x][y] > heighestHeight) {
+				heighestHeight = heightMap[x][y];
+			}
+			if (heightMap[x][y] < deepestDepth) {
+				deepestDepth = heightMap[x][y];
+			}
+		}
+	}
+}
+
+// This'll be a lazy Box blur
+int blurHeightmap(int blurRadius) {
+	int** blurredHeightMap;
+	blurredHeightMap = (int**)malloc(mapSizeX * sizeof(int*));
+    for (int i = 0; i < mapSizeX; i++) {
+        blurredHeightMap[i] = (int*)malloc(mapSizeY * sizeof(int));
+    }
+
 	// Iterate over every pixel
 	for (int y = 0; y < mapSizeY; y++) {
 		for (int x = 0; x < mapSizeX; x++) {
 			// Internal iteration
-			float total = 0;
-			for (int a = blurRadius*-1; a < blurRadius; a++) {
-				for (int b = blurRadius*-1; b < blurRadius; b++) {
+			int total = 0;
+			int i = 0;
+			for (int a = blurRadius*-1; a <= blurRadius; a++) {
+				for (int b = blurRadius*-1; b <= blurRadius; b++) {
 					int internalX = getWrappedAround(x+a,mapSizeX);
 					int internalY = getWrappedAround(y+b,mapSizeY);
 					//printf("%d,%d\n", internalX, internalY);
 					total += heightMap[internalX][internalY];
+					//printf("%d: %d,%d: %d\n", i, a,b,total);
+					i++;
 				}
 			}
-			total = total/(blurRadius*16);
-			//printf("%d,%d: %d\n", x,y,total);
+			total = total/i;
+			/*
+			if (total > heighestHeight) {
+				total = heighestHeight;
+			}
+			if (total < deepestDepth) {
+				total = deepestDepth;
+			}*/
 			blurredHeightMap[x][y] = total;
 			SDL_SetRenderDrawColor(renderer, total,total,total,255);
 			SDL_RenderDrawPoint(renderer, x, y);
 		}
-		SDL_RenderPresent(renderer);
 		//if (y%biomeSize) {
 		//}
 	}
+	SDL_RenderPresent(renderer);
 	
 	// Copy to main heightmap
 	for (int y = 0; y < mapSizeY; y++) {
@@ -356,6 +391,14 @@ void placeTile(int x, int y, int tile) {
 	x = getWrappedAround(x,mapSizeX);
 	y = getWrappedAround(y,mapSizeY);
 	map[x][y] = tile;
+}
+
+void zeroHeightMapIfLessThanZero(int x, int y) {
+	x = getWrappedAround(x,mapSizeX);
+	y = getWrappedAround(y,mapSizeY);
+	if (heightMap[x][y] < 0) {
+		heightMap[x][y] = 0;
+	}
 }
 
 void increaseHeightMap(int x, int y) {
@@ -537,7 +580,7 @@ void plotLine(int x0, int y0, int x1, int y1, int tile) {
  These create points around a circle,
  then randomly push that out to create islands of various sizes
 */
-void polygonIsland(int x1, int y1, float islandSize) {
+void polygonIsland(int x1, int y1, float islandSize, float smoothness) {
 	// Set number of points along circle
 	float* polygonX = (float*)malloc(maximumVerticies * sizeof(float));;
 	float* polygonY = (float*)malloc(maximumVerticies * sizeof(float));;
@@ -549,8 +592,8 @@ void polygonIsland(int x1, int y1, float islandSize) {
 	for (int pointID = 0; pointID < maximumVerticies; pointID++) {
 		//printf("%d/%d\n", pointID, maximumVerticies);
 		// Interpolate continent outline between points
-		float x2 = cos(currentAngle) * islandSize * getSmoothedRandomLimited(5, 10) + (float)x1;
-		float y2 = sin(currentAngle) * islandSize * getSmoothedRandomLimited(5, 10) + (float)y1;
+		float x2 = cos(currentAngle) * islandSize * getSmoothedRandomLimited(5, smoothness) + (float)x1;
+		float y2 = sin(currentAngle) * islandSize * getSmoothedRandomLimited(5, smoothness) + (float)y1;
 		polygonX[pointID] = x2;
 		polygonY[pointID] = y2;
 		
@@ -583,6 +626,7 @@ void polygonIsland(int x1, int y1, float islandSize) {
 
 			if (isInside) {
 				placeTile(mapX, mapY, emptyTile);
+				zeroHeightMapIfLessThanZero(mapX, mapY);
 				increaseHeightMap(mapX, mapY);
 			}
 		}
@@ -755,6 +799,12 @@ void saveBMP() {
     strcat(outputFilename, str1);
     strcat(outputFilename, str2);
     strcat(outputFilename, str3);
+	if (heightmapExport) {
+    	strcat(outputFilename, "_height");
+	}
+	if (albedoExport) {
+    	strcat(outputFilename, "_height");
+	}
     strcat(outputFilename, ".bmp");
 
     FILE* file = fopen(outputFilename, "wb");
@@ -833,6 +883,7 @@ void *generateIslands(void *vargp) {
 	int islandBaseSize = 3;
 	int maxRandomModifer = 10;
 	int maxRandomIslandModifier = 0;
+	int smoothness = 5;
 
 	// Generate Islands
 	for (int landmassX = startLandmass; landmassX < endLandmass; landmassX++) {
@@ -845,6 +896,7 @@ void *generateIslands(void *vargp) {
 					islandBaseSize = 13;
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 0;
+					smoothness = 6;
 					SDL_SetRenderDrawColor(renderer, 192, 192, 192, 128);	
 					//printf("^");
 					break;
@@ -853,22 +905,25 @@ void *generateIslands(void *vargp) {
 					islandBaseSize = 6;
 					numberOfIslands = 1;
 					maxRandomIslandModifier = 1;
+					smoothness = 4;
 					SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
 					//printf("#");
 					break;
 				case archipelago:
 					maxRandomModifer = 2;
-					islandBaseSize = 2;
+					islandBaseSize = 3;
 					numberOfIslands = 2;
 					maxRandomIslandModifier = 1;
+					smoothness = 3;
 					SDL_SetRenderDrawColor(renderer, 96, 96, 96, 128);	
 					//printf("o");
 					break;
 				case islands:
 					maxRandomModifer = 1;
-					islandBaseSize = 1;
+					islandBaseSize = 2;
 					numberOfIslands = 2;
 					maxRandomIslandModifier = 2;
+					smoothness = 2;
 					SDL_SetRenderDrawColor(renderer, 64, 64, 64, 128);	
 					//printf(":");
 					break;
@@ -878,6 +933,7 @@ void *generateIslands(void *vargp) {
 					islandBaseSize = 0;
 					numberOfIslands = 0;
 					maxRandomIslandModifier = 0;
+					smoothness = 0;
 					SDL_SetRenderDrawColor(renderer, 16, 16, 16, 128);	
 					//printf("~");
 					break;
@@ -890,15 +946,17 @@ void *generateIslands(void *vargp) {
 			
 			// Generate islands
 			int maximumNumberOfIslands = numberOfIslands + getRandomLimited(maxRandomIslandModifier);
+			//int smoothness = smoothness+(getRandomLimited(2)-1);
 			for (int i = 1; i <= maximumNumberOfIslands; i++) {
-				float islandSize = islandBaseSize+getRandomLimited(maxRandomModifer);
+				float islandSize = islandBaseSize + (getRandomLimited(maxRandomModifer)-(maxRandomModifer/2));
 				int x1 = landmassX*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeX/(1+getRandomLimited(16)));
 				int y1 = landmassY*landmassSize+(int)getRandomLimited(landmassSize);//(mapSizeY/(1+getRandomLimited(16)));
 				
 				if (rand()%4) {
 					// Polygon Island
 					//printf("Poly\n");
-					polygonIsland(x1,y1,islandSize);
+					polygonIsland(x1,y1,islandSize,smoothness);
+					//printf("Island");
 				} else {
 					// Random Island
 					//printf("Random\n");
@@ -1042,14 +1100,14 @@ int WinMain(int argc, char **argv) {
 				}
 			}
 			if (closest < 255) {
-				int r = (32*closest/255);
-				int g = (128*closest/255);
-				SDL_SetRenderDrawColor(renderer, r, g, closest, 255);
-				heightMap[x][y] = 255-closest;
+				closest = closest*-1;
+				SDL_SetRenderDrawColor(renderer, closest, closest, closest, 255);
+				heightMap[x][y] = closest;
 			} else {
 				SDL_SetRenderDrawColor(renderer, 32, 128, 255, 255);
-				heightMap[x][y] = 0;
+				heightMap[x][y] = deepestDepth;
 			}
+			//printf("%d,%d: %d\n",x,y,255-heightMap[x][y]);
 			if (visual & tectonicPlateBit) {
 				SDL_RenderDrawPoint(renderer, x, y);
 			}
@@ -1165,16 +1223,11 @@ int WinMain(int argc, char **argv) {
 	printf("Island Generation\n");
 	
 	// Heightmap Processing
-	for (int y = 0; y < mapSizeY; y++) {
-		for (int x = 0; x < mapSizeX; x++) {
-			/*
-			float height = (float)heightMap[x][y];
-			float multiplier = height/(float)heighestHeight;
-			heightMap[x][y] = (multiplier);
-			*/
-		}
-	}
-	//blurHeightmap(5);
+	normalizeHeightmap();
+	addNoiseToHeightmap(40);
+	blurHeightmap(5);
+	addNoiseToHeightmap(10);
+	blurHeightmap(1);
 	printf("Heightmap Processing\n");
 	
 	// Biomes based on landmass
@@ -1187,15 +1240,15 @@ int WinMain(int argc, char **argv) {
 			int biomeYOffset = biomeSize/3 + getRandomLimited(biomeSize/2);
 			//printf("%d,", checklandmass(biomeX*biomeSize,biomeY*biomeSize));	
 			// Basic Post-processing
-			if ((getSmoothedRandomLimited(3,5) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/6)) {
+			if ((getRandomLimited(4) + getIntDistance(biomeX,0,biomeX,biomeY)) < ((mapSizeY/biomeSize)/6)) {
 				biome = tundra;
 			}
-			if ((getSmoothedRandomLimited(3,5) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/6))) {
+			if ((getRandomLimited(4) + getIntDistance(biomeX,mapSizeY/biomeSize,biomeX,biomeY)) < (((mapSizeY/biomeSize)/6))) {
 				biome = tundra;
 			}
 			
-			if ((biomeY + getRandomLimited(2) > ((mapSizeY/biomeSize)/6)*3)
-				&& (biomeY - getRandomLimited(2) < ((mapSizeY/biomeSize)/6)*4)) {
+			if ((biomeY + getRandomLimited(2) > ((mapSizeY/biomeSize)/7)*4)
+				&& (biomeY - getRandomLimited(2) < ((mapSizeY/biomeSize)/7)*5)) {
 				biome = desert;
 			}
 			
@@ -1203,7 +1256,7 @@ int WinMain(int argc, char **argv) {
 			if (biome == emptybiome) {
 				switch(checklandmass(biomeX*biomeSize,biomeY*biomeSize)) {
 					case mainland:
-						biome = mountains;
+						biome = grasslands;
 						if (getRandomLimited(10)>7) {
 							biome = mountains;
 						} else {
@@ -1211,9 +1264,17 @@ int WinMain(int argc, char **argv) {
 						}
 						break;
 					case continent:
+						biome = grasslands;
+						if (heightMap[biomeX*biomeSize][biomeY*biomeSize] > heighestHeight/2) {
+							if (getRandomLimited(2)>1) {
+								biome = mountains;
+							}
+						}
+						/* else {
 						if (getRandomLimited(10)>9) {
 							biome = mountains;
 						}
+						}*/
 						break;
 					default:
 						biome = getRandomBiomeID();
@@ -1459,6 +1520,22 @@ int WinMain(int argc, char **argv) {
 					bmpMode = 1;
 					saveBMP();
 					bmpMode = 0;
+                }     
+				// Export Albedo
+                if(strcmp(key, "A") == 0) {
+					bmpMode = 1;
+					albedoExport = 1;
+					saveBMP();
+					bmpMode = 0;
+					albedoExport = 0;
+                }     
+				// Export Heightmap
+                if(strcmp(key, "S") == 0) {
+					bmpMode = 1;
+					heightmapExport = 1;
+					saveBMP();
+					bmpMode = 0;
+					heightmapExport = 0;
                 }     
 				// Rerender image
                 if(strcmp(key, "E") == 0) {
