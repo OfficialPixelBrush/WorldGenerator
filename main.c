@@ -134,6 +134,15 @@ int getWrappedAround(int location, int maxValue) {
     return location;//%maxValue;
 }
 
+int getWrappedAroundAlt(int location, int maxValue) {
+	if (location < 0) {
+		location = location*-1;
+	} else if (location >= maxValue) {
+		location = location%maxValue;
+	}
+    return location;//%maxValue;
+}
+
 // Get a random Tile ID
 int getRandomTileID() {
 	return rand() % numTiles;
