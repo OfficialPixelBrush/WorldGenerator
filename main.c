@@ -61,7 +61,7 @@ biomeInfo** biomeMap;
 unsigned char** landmassMap;
 color** finalMap;
 char textMode = 0;
-char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
+char visual = 0xff;//tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
 unsigned char r,g,b = 0;
 int tectonicPlates = 0;
 int mapSizeX, mapSizeY;
@@ -845,35 +845,41 @@ int getNeighboringBiomes(int x, int y, int direction) {
 	return biomeMap[x][y].biomeID;
 }
 
-int renderBiome(int biomeX,int biomeY) {
+int renderBiome(int biomeX,int biomeY, int biomeFinder) {
+	int alpha = 128;
+	if (biomeFinder) {
+		alpha = 4;
+	}
 	switch(biomeMap[biomeX][biomeY].biomeID) {
 		case emptybiome:
-			SDL_SetRenderDrawColor(renderer, 25, 25, 25, 128);	
+			SDL_SetRenderDrawColor(renderer, 25, 25, 25, alpha);	
 			break;
 		case mountains:
-			SDL_SetRenderDrawColor(renderer, 128, 128, 128, 128);	
+			SDL_SetRenderDrawColor(renderer, 128, 128, 128, alpha);	
 			break;
 		case desert:
-			SDL_SetRenderDrawColor(renderer, 255, 255, 0, 128);	
+			SDL_SetRenderDrawColor(renderer, 255, 255, 0, alpha);	
 			break;
 		case beach:
-			SDL_SetRenderDrawColor(renderer, 192, 255, 0, 128);	
+			SDL_SetRenderDrawColor(renderer, 192, 255, 0, alpha);	
 			break;
 		case forest:
-			SDL_SetRenderDrawColor(renderer, 0, 128, 0, 128);	
+			SDL_SetRenderDrawColor(renderer, 0, 128, 0, alpha);	
 			break;
 		case grasslands:
-			SDL_SetRenderDrawColor(renderer, 0, 255, 0, 128);	
+			SDL_SetRenderDrawColor(renderer, 0, 255, 0, alpha);	
 			break;
 		case tundra:
-			SDL_SetRenderDrawColor(renderer, 255, 255, 255, 128);
+			SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
 			break;
 		default:
-			SDL_SetRenderDrawColor(renderer, 255, 0, 255, 128);	
+			SDL_SetRenderDrawColor(renderer, 255, 0, 255, alpha);	
 			break;
 	}
-	SDL_Rect rect = {biomeX*biomeSize,biomeY*biomeSize,biomeSize,biomeSize};
-	SDL_RenderFillRect(renderer, &rect);
+	if (!biomeFinder) {
+		SDL_Rect rect = {biomeX*biomeSize,biomeY*biomeSize,biomeSize,biomeSize};
+		SDL_RenderFillRect(renderer, &rect);
+	}
 	//SDL_RenderPresent(renderer);
 	return 0;
 }
@@ -1445,7 +1451,7 @@ int WinMain(int argc, char **argv) {
 			biomeMap[biomeX][biomeY].biomeCenterOffsetX = biomeXOffset;
 			biomeMap[biomeX][biomeY].biomeCenterOffsetY = biomeYOffset;
 			if (visual & biomeBit) {
-				renderBiome(biomeX,biomeY);
+				renderBiome(biomeX,biomeY,0);
 			}
 		}
 		//printf("\n");
@@ -1500,22 +1506,12 @@ int WinMain(int argc, char **argv) {
 			ooo
 			
 			*/
-			SDL_SetRenderDrawColor(renderer, 255, 0, 0, 4);
 			for (int yBiome = -1; yBiome <= 1; yBiome++) {
 				for (int xBiome = -1; xBiome <= 1; xBiome++) {
+					int closestBiomeX, closestBiomeY;
 					if ((xBiome == 0) && (yBiome == 0)) {
 						// Own Biome
 					} else {
-						if (visual & biomeFinderBit) {
-							SDL_RenderDrawLine(
-								renderer,
-								mapX,
-								mapY,
-								((biomeXpos+xBiome)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetX,
-								((biomeYpos+yBiome)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetY
-							);
-						}
-						
 						// Get distance to next biome
 						
 						int distance = getIntDistance(
@@ -1528,9 +1524,21 @@ int WinMain(int argc, char **argv) {
 						// Check closest distance
 						if (distance < closestDistance) {
 							closestDistance = distance;
-							int closestBiomeX = getWrappedAround(biomeXpos-(xBiome*-1),mapSizeX/biomeSize);
-							int closestBiomeY = getWrappedAround(biomeYpos-(yBiome*-1),mapSizeY/biomeSize);
+							closestBiomeX = getWrappedAround(biomeXpos-(xBiome*-1),mapSizeX/biomeSize);
+							closestBiomeY = getWrappedAround(biomeYpos-(yBiome*-1),mapSizeY/biomeSize);
 							closestBiome = biomeMap[closestBiomeX][closestBiomeY].biomeID;
+						}
+						
+						if (visual & biomeFinderBit) {
+							renderBiome(closestBiomeX, closestBiomeY, 1);
+							//SDL_SetRenderDrawColor(renderer, 255, 0, 0, 4);
+							SDL_RenderDrawLine(
+								renderer,
+								mapX,
+								mapY,
+								((biomeXpos+xBiome)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetX,
+								((biomeYpos+yBiome)*biomeSize)+biomeMap[mapX/biomeSize][mapY/biomeSize].biomeCenterOffsetY
+							);
 						}
 						//printf("%d:%d \n", biomeMap[biomeXpos-xBiome][biomeYpos-yBiome], distance);
 					}
