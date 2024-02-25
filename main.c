@@ -48,10 +48,18 @@ struct biomeStruct {
 };
 typedef struct biomeStruct biomeInfo;
 
+struct color {
+	unsigned char red;
+	unsigned char green;
+	unsigned char blue;
+};
+typedef struct color color;
+
 unsigned char** map;
 int** heightMap;
 biomeInfo** biomeMap;
 unsigned char** landmassMap;
+color** finalMap;
 char textMode = 0;
 char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
 unsigned char r,g,b = 0;
@@ -62,6 +70,8 @@ int initialSeed;
 char animate = 0;
 int heighestHeight = 0;
 int deepestDepth = -255;
+
+double lightAngle = 3.5;
 
 // Export Options
 char bmpMode = 0;
@@ -74,6 +84,7 @@ float biomeMapSizeX, biomeMapSizeY = 0;
 int numberOfThreads = 16;
 pthread_t *tids = NULL;
 int *threadProgress = NULL;
+int finishedThreads = 0;
 
 // enums
 typedef enum {
@@ -195,9 +206,36 @@ int updateProgressBar(int progress, int mode) {
 	return 0;
 }
 
+int find_max_along_line(int** arr, int m, int n, int x1, int y1, int x2, int y2) {
+  int dx = x2 - x1, dy = y2 - y1;
+  int max_value = INT_MIN;
+  for (float t = 0; t <= 1; t += 0.01) { // Adjust step size based on desired precision
+    int x = getWrappedAround((int)round(x1 + t * dx),mapSizeX);
+    int y = getWrappedAround((int)round(y1 + t * dy),mapSizeY);
+    // Check if x and y are within array bounds and update max_value if necessary
+    if (x >= 0 && x < m && y >= 0 && y < n && arr[x][y] > max_value) {
+      max_value = arr[x][y];
+    }
+  }
+  return max_value;
+}
+
+int getCoordinatesRelativeToCenter(double angle, double distance, double center_x, double center_y, char xOrY) {
+  double x_double = center_x + distance * cos(angle);
+  double y_double = center_y + distance * sin(angle);
+
+  // Round coordinates to nearest integer
+  if (xOrY) {
+  	return (int)round(x_double);
+  } else {
+  	return (int)round(y_double);
+  }
+}
+
 // Render a tile
 int printTile(int x, int y) {
-	switch(map[x][y]) {
+	int currentTile = map[x][y];
+	switch(currentTile) {
 		case emptyTile: // Empty
 			r = 0;
 			g = 0;
@@ -256,13 +294,32 @@ int printTile(int x, int y) {
 	};
 	// Shade
 	if (!albedoExport) {
-		float height = (((float)heightMap[x][y])/255.0f);
+		int heightAtCoordinate = heightMap[x][y];
+		int distantX = getCoordinatesRelativeToCenter(lightAngle,2.0,(double)x,(double)y, 1);
+		int distantY = getCoordinatesRelativeToCenter(lightAngle,2.0,(double)x,(double)y, 0);
+		float shade = 0.0f;
+		int maxAlongLine = find_max_along_line(heightMap, mapSizeX, mapSizeY, x, y, distantX, distantY);
+		
+		if ((maxAlongLine > heightAtCoordinate)) {
+			float untilPeak = ((float)heightAtCoordinate)/((float)255.0f);
+			float heightDifference = ((float)heightAtCoordinate)/((float)maxAlongLine);
+			shade = (1.0f-untilPeak)*heightDifference;
+		} else {
+			shade = 1.0f;
+		}
+
+		if (currentTile == oceanTile) {
+			if (heightAtCoordinate < 128) {
+				shade *= ((float)heightAtCoordinate)/255.0f;
+			}
+		}
+		//float height = (((float)heightMap[x][y])/255.0f);
 		float finalR = (float)r/255.0f;
 		float finalG = (float)g/255.0f;
 		float finalB = (float)b/255.0f;
-		finalR *= height;
-		finalG *= height;
-		finalB *= height;
+		finalR *= shade;
+		finalG *= shade;
+		finalB *= shade;
 		r = ((int)(finalR*255.0f))&0xFF;
 		g = ((int)(finalG*255.0f))&0xFF;
 		b = ((int)(finalB*255.0f))&0xFF;
@@ -274,8 +331,9 @@ int printTile(int x, int y) {
 	}
 
 	if (!bmpMode) {
-		SDL_SetRenderDrawColor(renderer,r,g,b,255);
-		SDL_RenderDrawPoint(renderer, x, y);
+		finalMap[x][y].red = r;
+		finalMap[x][y].green = g;
+		finalMap[x][y].blue = b;
 	}	
 	return 0;
 }
@@ -365,6 +423,21 @@ int blurHeightmap(int blurRadius) {
 	return 0;
 }
 
+void *printSectionOfMap(void *vargp) {
+    int index = (int)vargp;
+	int minSegment = mapSizeX/numberOfThreads;
+	int start = index*minSegment;
+	int end   = index*minSegment+minSegment-1;
+	//printf("%d: %d -> %d\n", index, start, end);
+	for (x = start; x < end; x++) {
+		for (y = 0; y < mapSizeY; y++) {
+			printTile(x,y);
+			//printf("%d: %d,%d\n", index, x,y);
+		}
+	}
+	finishedThreads++;
+}
+
 // Render the map
 int printMap() {
 	// Clear screen
@@ -378,11 +451,41 @@ int printMap() {
 		}
 		printf("\x1b[0m");
 	} else {
-		for (y = 0; y < mapSizeY; y++) {
-			for (x = 0; x < mapSizeX; x++) {
+		for (x = 0; x < mapSizeX; x++) {
+			for (y = 0; y < mapSizeY; y++) {
 				printTile(x,y);
+				//printf("%d: %d,%d\n", index, x,y);
 			}
 		}
+		/*
+		tids = (pthread_t *)malloc(numberOfThreads * sizeof(pthread_t));
+		
+		if (tids == NULL) {
+			// handle memory allocation failure
+			printf("Could not allocate memory to threads!\n");
+			return 1;
+		}
+		
+		// Create Threads
+		finishedThreads = 0;
+		for (int i = 0; i < numberOfThreads; i++) {
+			int ret = pthread_create(&tids[i], NULL, printSectionOfMap, (void *)i); 
+			if (ret != 0) {
+				printf("Thread %d failed to create! Error code %d\n", i, ret);
+				return 1;
+			}
+		}
+
+		// Supervise
+		//while (finishedThreads < numberOfThreads) {
+			//printf("%d/%d\n", finishedThreads, numberOfThreads);
+		//}
+		
+		// Rejoin them
+		for (int i = 0; i < numberOfThreads; i++) {
+			pthread_join(tids[i], NULL);
+		}
+		free(tids);*/
 	}
 }
 
@@ -855,7 +958,8 @@ void saveBMP() {
     fwrite(header, sizeof(uint8_t), headerSize, file);
 
     // Write image data (BGR format)
-	for (int y = 0; y < mapSizeY; y++) {
+	// Also write from bottom to top!!
+	for (int y = mapSizeY; y > 0; y--) {
 		for (int x = 0; x < mapSizeX; x++) {
 			// Assuming r, g, and b represent the red, green, and blue components respectively for each pixel.
 			printTile(x,y);
@@ -968,6 +1072,30 @@ void *generateIslands(void *vargp) {
 	}
 }
 
+void drawFinalMap() {
+	for (int y = 0; y < mapSizeY; y++) {
+		for (int x = 0; x < mapSizeX; x++) {
+			color finalCol = finalMap[x][y];
+			SDL_SetRenderDrawColor(renderer,finalCol.red,finalCol.green,finalCol.blue,255);
+			SDL_RenderDrawPoint(renderer, x, y);
+		}
+	}
+}
+
+void changeHeightmapOverBiomeArea(int biomeX, int biomeY, int change) {
+	for (int x = biomeX*biomeSize; x < biomeX*biomeSize+biomeSize; x++) {	
+		for (int y = biomeY*biomeSize; y < biomeY*biomeSize+biomeSize; y++) {
+			heightMap[x][y] += change+getRandomLimited(1);
+			if (heightMap[x][y] < 0) {
+				heightMap[x][y] = 0;
+			}
+			if (heightMap[x][y] > heighestHeight) {
+				heightMap[x][y] = heighestHeight;
+			}
+		}
+	}
+} 
+
 int WinMain(int argc, char **argv) {
     //for (int i = 0; i < argc; i++) printf("argv[%d] = %s\n", i, argv[i]);
 	//if (argc > 0) {
@@ -988,6 +1116,11 @@ int WinMain(int argc, char **argv) {
 	heighestHeight = 1;
 	
 	// Initialize maps
+	finalMap = (color**)malloc(mapSizeX * sizeof(color*));
+    for (int i = 0; i < mapSizeX; i++) {
+        finalMap[i] = (color*)malloc(mapSizeY * sizeof(color));
+    }
+
 	map = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
     for (int i = 0; i < mapSizeX; i++) {
         map[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
@@ -1033,7 +1166,7 @@ int WinMain(int argc, char **argv) {
 	}
 
     // Create an SDL window
-    SDL_Window *window = SDL_CreateWindow("Mapgen", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w/3*2, dm.h/3*2, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE );
+    SDL_Window *window = SDL_CreateWindow("World Generator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w/3*2, dm.h/3*2, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE );
     CHECK_ERROR(window == NULL, SDL_GetError());
 
     // Create a renderer (accelerated and in sync with the display refresh rate)
@@ -1045,9 +1178,9 @@ int WinMain(int argc, char **argv) {
 
     // Initial renderer color
 	restart:
-	if (!animate) {
-		initialSeed = time(NULL); // 1708518104 //1690361670; // time(NULL); // 1690274433;
-	}
+	//if (!animate) {
+	initialSeed = time(NULL); // 1708518104 //1690361670; // time(NULL); // 1690274433;
+	//}
 	printf("%d\n",initialSeed);
 	srand(initialSeed);
     SDL_SetRenderDrawColor(renderer, 16, 16, 16, 255);	
@@ -1219,16 +1352,8 @@ int WinMain(int argc, char **argv) {
 	for (int i = 0; i < numberOfThreads; i++) {
 		pthread_join(tids[i], NULL);
 	}
-    //pthread_exit(NULL); 
+	free(tids);
 	printf("Island Generation\n");
-	
-	// Heightmap Processing
-	normalizeHeightmap();
-	addNoiseToHeightmap(40);
-	blurHeightmap(5);
-	addNoiseToHeightmap(10);
-	blurHeightmap(1);
-	printf("Heightmap Processing\n");
 	
 	// Biomes based on landmass
 	for (int biomeY = 0; biomeY < mapSizeY/biomeSize; biomeY++) {
@@ -1250,6 +1375,7 @@ int WinMain(int argc, char **argv) {
 			if ((biomeY + getRandomLimited(2) > ((mapSizeY/biomeSize)/7)*4)
 				&& (biomeY - getRandomLimited(2) < ((mapSizeY/biomeSize)/7)*5)) {
 				biome = desert;
+				//changeHeightmapOverBiomeArea(biomeX,biomeY,-3);
 			}
 			
 			// Checks to ensure adjance Biomes don't fuck up
@@ -1265,10 +1391,10 @@ int WinMain(int argc, char **argv) {
 						break;
 					case continent:
 						biome = grasslands;
-						if (heightMap[biomeX*biomeSize][biomeY*biomeSize] > heighestHeight/2) {
-							if (getRandomLimited(2)>1) {
+						if (heightMap[biomeX*biomeSize][biomeY*biomeSize] > heighestHeight/3) {
+							//if (getRandomLimited(2)>1) {
 								biome = mountains;
-							}
+							//}
 						}
 						/* else {
 						if (getRandomLimited(10)>9) {
@@ -1326,6 +1452,15 @@ int WinMain(int argc, char **argv) {
 	}
 	SDL_RenderPresent(renderer);
 	printf("Biome Generation\n");
+	
+	// Heightmap Processing
+	normalizeHeightmap();
+	addNoiseToHeightmap(20);
+	blurHeightmap(3);
+	addNoiseToHeightmap(3);
+	blurHeightmap(1);
+	addNoiseToHeightmap(1);
+	printf("Heightmap Processing\n");
 	
 	// Prepare
 	for (int mapY = 0; mapY < mapSizeY; mapY++) {
@@ -1494,16 +1629,12 @@ int WinMain(int argc, char **argv) {
     char running = 1;
 	if (visual & finalMapRender) {
 		printMap();
+		drawFinalMap();
 	}
 	
+    SDL_RenderPresent(renderer);
     // Clear screen	
     SDL_Event event;
-	if (animate) {
-		bmpMode = 1;
-		saveBMP();
-		initialSeed+=1;
-		goto restart;
-	}
     while(running) {
         // Process events
         while(SDL_PollEvent(&event)) {
@@ -1540,26 +1671,37 @@ int WinMain(int argc, char **argv) {
 				// Rerender image
                 if(strcmp(key, "E") == 0) {
                     printMap();
+					drawFinalMap();
+       				SDL_RenderPresent(renderer);
                 }     
 				// Render new image
                 if(strcmp(key, "R") == 0) {
                     goto restart;
                 }      
-				// Generate and save series of images incrementing from original seed
+				// Rotate light
                 if(strcmp(key, "T") == 0) {
 					animate = 1;
-					bmpMode = 1;
-					saveBMP();
-					initialSeed+=1;
-                    goto restart;
+					//bmpMode = 1;
+					//saveBMP();
+					//initialSeed+=1;
+                    //goto restart;
                 }                      				
             }
         }
+		
+		if (animate) {
+			lightAngle += 0.1f;
+			printMap();
+			drawFinalMap();
+			printf("Angle: %f\n", lightAngle);
+        	SDL_RenderPresent(renderer);
+			//SDL_Delay(100);
+		}
 
         // Draw
 
         // Show what was drawn
-        SDL_RenderPresent(renderer);
     }
+    pthread_exit(NULL); 
 	return 0;
 }
