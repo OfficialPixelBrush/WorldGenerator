@@ -61,7 +61,7 @@ biomeInfo** biomeMap;
 unsigned char** landmassMap;
 color** finalMap;
 char textMode = 0;
-char visual = 0xff;//tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
+char visual = tectonicPlateBit | tectonicLandmassBit | polygonIslandsBit |biomeBit | finalMapRender;
 unsigned char r,g,b = 0;
 int tectonicPlates = 0;
 int mapSizeX, mapSizeY;
@@ -69,7 +69,7 @@ int maximumVerticies;
 int initialSeed;
 char animate = 0;
 int heighestHeight = 0;
-int deepestDepth = -255;
+int deepestDepth = 0;
 
 double lightAngle = 3.5;
 
@@ -241,6 +241,36 @@ int getCoordinatesRelativeToCenter(double angle, double distance, double center_
   }
 }
 
+float getAliasedShade(int x, int y, int heightAtCoordinate, unsigned char currentTile) {
+	float shade = 0.0f;
+	float stepSize = 0.2;
+	int numberOfSteps = 0;
+	for (float yIntern = -0.5; yIntern < 0.5; yIntern += stepSize) {
+		for (float xIntern = -0.5; xIntern < 0.5; xIntern += stepSize) {
+			int distantX = getCoordinatesRelativeToCenter(lightAngle,5.0,(double)x+xIntern,(double)y+yIntern, 1);
+			int distantY = getCoordinatesRelativeToCenter(lightAngle,5.0,(double)x+xIntern,(double)y+yIntern, 0);
+			int maxAlongLine = find_max_along_line(heightMap, mapSizeX, mapSizeY, x, y, distantX, distantY);
+			
+			if ((maxAlongLine > heightAtCoordinate)) {
+				float untilPeak = ((float)heightAtCoordinate)/((float)255.0f);
+				float heightDifference = ((float)heightAtCoordinate)/((float)maxAlongLine);
+				shade += (1.0f-untilPeak)*heightDifference;
+			} else {
+				shade += 1.0f;
+			}
+			numberOfSteps++;
+		}
+	}
+	shade /= (float)numberOfSteps;
+
+	if (currentTile == oceanTile) {
+		if (heightAtCoordinate < 128) {
+			shade *= ((float)heightAtCoordinate)/255.0f;
+		}
+	}
+	return shade;
+}
+
 // Render a tile
 int printTile(int x, int y) {
 	int currentTile = map[x][y];
@@ -305,24 +335,7 @@ int printTile(int x, int y) {
 	if (!albedoExport) {
 		int heightAtCoordinate = heightMap[x][y];
 		// TODO: Jitter this to smooth pixels
-		int distantX = getCoordinatesRelativeToCenter(lightAngle,2.0,(double)x,(double)y, 1);
-		int distantY = getCoordinatesRelativeToCenter(lightAngle,2.0,(double)x,(double)y, 0);
-		float shade = 0.0f;
-		int maxAlongLine = find_max_along_line(heightMap, mapSizeX, mapSizeY, x, y, distantX, distantY);
-		
-		if ((maxAlongLine > heightAtCoordinate)) {
-			float untilPeak = ((float)heightAtCoordinate)/((float)255.0f);
-			float heightDifference = ((float)heightAtCoordinate)/((float)maxAlongLine);
-			shade = (1.0f-untilPeak)*heightDifference;
-		} else {
-			shade = 1.0f;
-		}
-
-		if (currentTile == oceanTile) {
-			if (heightAtCoordinate < 128) {
-				shade *= ((float)heightAtCoordinate)/255.0f;
-			}
-		}
+		float shade = getAliasedShade(x, y, heightAtCoordinate, currentTile);
 		//float height = (((float)heightMap[x][y])/255.0f);
 		float finalR = (float)r/255.0f;
 		float finalG = (float)g/255.0f;
@@ -349,14 +362,27 @@ int printTile(int x, int y) {
 }
 
 int normalizeHeightmap() {
+	int heightmax = 0;
+	int depthmax = 0;
+	for (int y = 0; y < mapSizeY; y++) {
+		for (int x = 0; x < mapSizeX; x++) {
+			int height = heightMap[x][y];
+			if (height > heightmax) {
+				heightmax = height;
+			}
+			if (height < depthmax) {
+				depthmax = height;
+			}
+		}
+	}
 	for (int y = 0; y < mapSizeY; y++) {
 		for (int x = 0; x < mapSizeX; x++) {
 			int height = heightMap[x][y];
 			float relativeHeight = 0;
 			if (height >= 0) {
-				relativeHeight = (float)height/(float)heighestHeight;
+				relativeHeight = (float)height/(float)heightmax;
 			} else {
-				relativeHeight = ((float)height/(float)deepestDepth)*-1;
+				relativeHeight = ((float)height/(float)depthmax)*-1;
 			}
 			relativeHeight = (relativeHeight/2)+0.5f;
 			heightMap[x][y] = (int)(relativeHeight*255.0f);
@@ -1259,9 +1285,12 @@ int WinMain(int argc, char **argv) {
 				closest = closest*-1;
 				SDL_SetRenderDrawColor(renderer, closest, closest, closest, 255);
 				heightMap[x][y] = closest;
+				if (closest < deepestDepth) {
+					deepestDepth = closest;
+				}
 			} else {
 				SDL_SetRenderDrawColor(renderer, 32, 128, 255, 255);
-				heightMap[x][y] = deepestDepth;
+				heightMap[x][y] = -255;
 			}
 			//printf("%d,%d: %d\n",x,y,255-heightMap[x][y]);
 			if (visual & tectonicPlateBit) {
@@ -1398,7 +1427,7 @@ int WinMain(int argc, char **argv) {
 			if ((biomeY + getRandomLimited(2) > ((mapSizeY/biomeSize)/7)*4)
 				&& (biomeY - getRandomLimited(2) < ((mapSizeY/biomeSize)/7)*5)) {
 				biome = desert;
-				//changeHeightmapOverBiomeArea(biomeX,biomeY,-3);
+				//changeHeightmapOverBiomeArea(biomeX,biomeY,-1);
 			}
 			
 			// Checks to ensure adjance Biomes don't fuck up
@@ -1478,10 +1507,11 @@ int WinMain(int argc, char **argv) {
 	
 	// Heightmap Processing
 	normalizeHeightmap();
-	addNoiseToHeightmap(20);
-	blurHeightmap(3);
-	addNoiseToHeightmap(3);
+	addNoiseToHeightmap(30);
+	blurHeightmap(2);
+	addNoiseToHeightmap(5);
 	blurHeightmap(1);
+	addNoiseToHeightmap(3);
 	addNoiseToHeightmap(1);
 	printf("Heightmap Processing\n");
 	
