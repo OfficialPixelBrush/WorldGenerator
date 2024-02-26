@@ -218,7 +218,7 @@ int updateProgressBar(int progress, int mode) {
 int find_max_along_line(int** arr, int m, int n, int x1, int y1, int x2, int y2) {
   int dx = x2 - x1, dy = y2 - y1;
   int max_value = INT_MIN;
-  for (float t = 0; t <= 1; t += 0.01) { // Adjust step size based on desired precision
+  for (float t = 0; t <= 1; t += 0.5) { // Adjust step size based on desired precision
     int x = getWrappedAround((int)round(x1 + t * dx),mapSizeX);
     int y = getWrappedAround((int)round(y1 + t * dy),mapSizeY);
     // Check if x and y are within array bounds and update max_value if necessary
@@ -304,6 +304,7 @@ int printTile(int x, int y) {
 	// Shade
 	if (!albedoExport) {
 		int heightAtCoordinate = heightMap[x][y];
+		// TODO: Jitter this to smooth pixels
 		int distantX = getCoordinatesRelativeToCenter(lightAngle,2.0,(double)x,(double)y, 1);
 		int distantY = getCoordinatesRelativeToCenter(lightAngle,2.0,(double)x,(double)y, 0);
 		float shade = 0.0f;
@@ -1120,8 +1121,15 @@ int WinMain(int argc, char **argv) {
 
 	
 	// implement reading of parameters!!
-	if (numberOfThreads % 2) {
-		printf("Number of threads MUST be multiple of two!\n");
+	if (numberOfThreads > 0) {
+		if (numberOfThreads != 1) {
+			if (numberOfThreads % 2) {
+				printf("Number of threads MUST be multiple of two!\n");
+				return 1;
+			}
+		}
+	} else {
+		printf("Number of threads is less than 1!\n");
 		return 1;
 	}
 	
