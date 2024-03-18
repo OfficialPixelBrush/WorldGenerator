@@ -55,6 +55,13 @@ struct color {
 };
 typedef struct color color;
 
+struct position {
+	int x,y;
+};
+typedef struct position position;
+
+position* tectonicPlatesOrigin;
+int* tectonicPlatesSize;
 unsigned char** map;
 int** heightMap;
 biomeInfo** biomeMap;
@@ -1136,7 +1143,83 @@ void changeHeightmapOverBiomeArea(int biomeX, int biomeY, int change) {
 			}
 		}
 	}
-} 
+}
+
+int generateLandmasses() {
+	
+	for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
+		updateProgressBar(scaleToValue(landmassY,mapSizeY/landmassSize,100),1);
+		for (int landmassX = 0; landmassX < mapSizeX/landmassSize; landmassX++) {			
+			// Initial random landmass
+			int landmass = 0;
+			int closest = mapSizeX;
+			int closestPoint = 0;
+			// Then concrete ones based on tectonic plates
+			for (int i = 0; i < tectonicPlates; i++) {
+				int value = wrapped_distance(landmassX*landmassSize,landmassY*landmassSize,tectonicPlatesOrigin[i].x,tectonicPlatesOrigin[i].y,mapSizeX,mapSizeY);
+				value += getRandomLimited(20);
+				if (value < closest) {
+					closestPoint = i;
+					closest = value;
+				}
+			}
+			// If it's near the center, it's mainland
+			if (closest < (2*tectonicPlatesSize[closestPoint])+getRandomLimited(10)) {
+				landmass = mainland;
+				if (visual & tectonicLandmassBit) {
+					SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
+					SDL_SetRenderDrawColor(renderer, 64, 32, 32, 128);
+					SDL_RenderFillRect(renderer, &rect);
+				}
+			// A little farther out it's still part of the main continent
+			} else if (closest < (6*tectonicPlatesSize[closestPoint])+getRandomLimited(20)) {
+				landmass = continent;
+				if (visual & tectonicLandmassBit) {
+					SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
+					SDL_SetRenderDrawColor(renderer, 128, 32, 32, 128);
+					SDL_RenderFillRect(renderer, &rect);
+				}
+			// After this, landmasses become a bit scarcer and fade into the ocean
+			} else if (closest < (12*tectonicPlatesSize[closestPoint])) {
+				if (getRandomLimited(20)>15) {
+					landmass = continent;
+				}
+				if (visual & tectonicLandmassBit) {
+					SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
+					SDL_SetRenderDrawColor(renderer, 192, 32, 32, 128);
+					SDL_RenderFillRect(renderer, &rect);
+				}
+			// Everything past this point has a VERY high chance of just being ocean
+			} else if (closest < 12*+getRandomLimited(20)) {
+				if (getRandomLimited(100)>95) {
+					landmass = getRandomLimitedMinMax(ocean,archipelago);
+				}
+			} else {
+				landmass = ocean;
+			}
+			
+			// Finish up any empty tiles
+			if (landmass == emptylandmass) {
+				landmass = ocean;
+			}
+			landmassMap[landmassX][landmassY] = landmass;
+		}
+	}
+	return 0;
+}
+
+int generateTectonicPlates() {
+	// Tectonic plates generation
+	// To generate more believable landmasses & mountain ranges
+    tectonicPlatesOrigin = (position*)malloc(tectonicPlates * sizeof(position));
+    tectonicPlatesSize = (int*)malloc(tectonicPlates * sizeof(int));
+	for (int i = 0; i < tectonicPlates; i++) {
+		tectonicPlatesOrigin[i].x = (int)getRandomLimited(mapSizeX);
+		tectonicPlatesOrigin[i].y = (int)getRandomLimitedMinMax(mapSizeY/5,mapSizeY/5*4);
+		tectonicPlatesSize[i] = (int)getRandomLimitedMinMax(1,15);
+	}
+	return 0;
+}
 
 int WinMain(int argc, char **argv) {
     //for (int i = 0; i < argc; i++) printf("argv[%d] = %s\n", i, argv[i]);
@@ -1256,15 +1339,7 @@ int WinMain(int argc, char **argv) {
 	// Generation
 	
 	// Tectonic plates generation
-	// To generate more believable landmasses & mountain ranges
-    int* tectonicPlatesOriginX = (int*)malloc(tectonicPlates * sizeof(int));
-    int* tectonicPlatesOriginY = (int*)malloc(tectonicPlates * sizeof(int));
-    int* tectonicPlatesSize = (int*)malloc(tectonicPlates * sizeof(int));
-	for (int i = 0; i < tectonicPlates; i++) {
-		tectonicPlatesOriginX[i] = (int)getRandomLimited(mapSizeX);
-		tectonicPlatesOriginY[i] = (int)getRandomLimitedMinMax(mapSizeY/5,mapSizeY/5*4);
-		tectonicPlatesSize[i] = (int)getRandomLimitedMinMax(1,15);
-	}
+	generateTectonicPlates();
 	printf("Tectonic Plate Points\n");
 	
 	// Tectonic Plate Visualzation
@@ -1275,7 +1350,7 @@ int WinMain(int argc, char **argv) {
 			int closest = mapSizeX*mapSizeY;
 			int closestPoint = 0;
 			for (int k = 0; k < tectonicPlates; k++) {
-				int value = wrapped_distance(x,y,tectonicPlatesOriginX[k],tectonicPlatesOriginY[k],mapSizeX,mapSizeY);
+				int value = wrapped_distance(x,y,tectonicPlatesOrigin[k].x,tectonicPlatesOrigin[k].y,mapSizeX,mapSizeY);
 				if (value < closest) {
 					closestPoint = k;
 					closest = value;
@@ -1306,65 +1381,7 @@ int WinMain(int argc, char **argv) {
 	int maxRandomIslandModifier = 0;
 	*/
 	// landmass
-	
-	for (int landmassY = 0; landmassY < mapSizeY/landmassSize; landmassY++) {
-		updateProgressBar(scaleToValue(landmassY,mapSizeY/landmassSize,100),1);
-		for (int landmassX = 0; landmassX < mapSizeX/landmassSize; landmassX++) {			
-			// Initial random landmass
-			int landmass = 0;
-			int closest = mapSizeX;
-			int closestPoint = 0;
-			// Then concrete ones based on tectonic plates
-			for (int i = 0; i < tectonicPlates; i++) {
-				int value = wrapped_distance(landmassX*landmassSize,landmassY*landmassSize,tectonicPlatesOriginX[i],tectonicPlatesOriginY[i],mapSizeX,mapSizeY);
-				value += getRandomLimited(20);
-				if (value < closest) {
-					closestPoint = i;
-					closest = value;
-				}
-			}
-			// If it's near the center, it's mainland
-			if (closest < (2*tectonicPlatesSize[closestPoint])+getRandomLimited(10)) {
-				landmass = mainland;
-				if (visual & tectonicLandmassBit) {
-					SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
-					SDL_SetRenderDrawColor(renderer, 64, 32, 32, 128);
-					SDL_RenderFillRect(renderer, &rect);
-				}
-			// A little farther out it's still part of the main continent
-			} else if (closest < (6*tectonicPlatesSize[closestPoint])+getRandomLimited(20)) {
-				landmass = continent;
-				if (visual & tectonicLandmassBit) {
-					SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
-					SDL_SetRenderDrawColor(renderer, 128, 32, 32, 128);
-					SDL_RenderFillRect(renderer, &rect);
-				}
-			// After this, landmasses become a bit scarcer and fade into the ocean
-			} else if (closest < (12*tectonicPlatesSize[closestPoint])) {
-				if (getRandomLimited(20)>15) {
-					landmass = continent;
-				}
-				if (visual & tectonicLandmassBit) {
-					SDL_Rect rect = {landmassX*landmassSize,landmassY*landmassSize,landmassSize,landmassSize};
-					SDL_SetRenderDrawColor(renderer, 192, 32, 32, 128);
-					SDL_RenderFillRect(renderer, &rect);
-				}
-			// Everything past this point has a VERY high chance of just being ocean
-			} else if (closest < 12*+getRandomLimited(20)) {
-				if (getRandomLimited(100)>95) {
-					landmass = getRandomLimitedMinMax(ocean,archipelago);
-				}
-			} else {
-				landmass = ocean;
-			}
-			
-			// Finish up any empty tiles
-			if (landmass == emptylandmass) {
-				landmass = ocean;
-			}
-			landmassMap[landmassX][landmassY] = landmass;
-		}
-	}
+	generateLandmasses();
 	printf("Landmass Generation\n");
 	tids = (pthread_t *)malloc(numberOfThreads * sizeof(pthread_t));
 	threadProgress = (int *)malloc(numberOfThreads * sizeof(int));
