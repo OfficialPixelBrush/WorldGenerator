@@ -1221,208 +1221,7 @@ int generateTectonicPlates() {
 	return 0;
 }
 
-int WinMain(int argc, char **argv) {
-    //for (int i = 0; i < argc; i++) printf("argv[%d] = %s\n", i, argv[i]);
-	//if (argc > 0) {
-		//numberOfThreads = atoi(argv[0]);
-		//printf("Number of Threads: %s\n", argv[0]);
-	//}
-
-	
-	// implement reading of parameters!!
-	if (numberOfThreads > 0) {
-		if (numberOfThreads != 1) {
-			if (numberOfThreads % 2) {
-				printf("Number of threads MUST be multiple of two!\n");
-				return 1;
-			}
-		}
-	} else {
-		printf("Number of threads is less than 1!\n");
-		return 1;
-	}
-	
-	mapSizeX = 1024;
-	mapSizeY = 512;
-	maximumVerticies = 25;
-	heighestHeight = 1;
-	
-	// Initialize maps
-	finalMap = (color**)malloc(mapSizeX * sizeof(color*));
-    for (int i = 0; i < mapSizeX; i++) {
-        finalMap[i] = (color*)malloc(mapSizeY * sizeof(color));
-    }
-
-	map = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
-    for (int i = 0; i < mapSizeX; i++) {
-        map[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
-    }
-	
-	// Heightmaps
-	heightMap = (int**)malloc(mapSizeX * sizeof(int*));
-    for (int i = 0; i < mapSizeX; i++) {
-        heightMap[i] = (int*)malloc(mapSizeY * sizeof(int));
-    }
-	
-	// Biome Map
-	biomeMapSizeX = (((float)mapSizeX)/((float)biomeSize))+0.5;
-	biomeMapSizeY = (((float)mapSizeY)/((float)biomeSize))+0.5;
-	
-	biomeMap = (biomeInfo**)malloc((int)biomeMapSizeX * sizeof(biomeInfo*));
-    for (int i = 0; i < mapSizeX/biomeSize; i++) {
-        biomeMap[i] = (biomeInfo*)malloc((int)biomeMapSizeY * sizeof(biomeInfo));
-    }
-	
-	landmassMap = (unsigned char**)malloc(mapSizeX/landmassSize * sizeof(unsigned char*));
-    for (int i = 0; i < mapSizeX/landmassSize; i++) {
-        landmassMap[i] = (unsigned char*)malloc(mapSizeY/landmassSize * sizeof(unsigned char));
-    }
-	
-	tectonicPlates = 20; //mapSizeX/(landmassSize*(2+(getRandomLimited(10))));
-	
-	// SDL2 Prep
-	// Seed the map
-	float renderScale = 1.0f;
-	
-	// Initialize SDL
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
-    CHECK_ERROR(SDL_Init(SDL_INIT_VIDEO) != 0, SDL_GetError());
-
-	// Get Desktop size
-	SDL_DisplayMode dm;
-
-	if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
-	{
-		 SDL_Log("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
-		 return 1;
-	}
-
-    // Create an SDL window
-    SDL_Window *window = SDL_CreateWindow("World Generator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w/3*2, dm.h/3*2, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE );
-    CHECK_ERROR(window == NULL, SDL_GetError());
-
-    // Create a renderer (accelerated and in sync with the display refresh rate)
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); 
-	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-	//SDL_RenderSetScale(renderer, renderScale, renderScale);
-	SDL_RenderSetLogicalSize(renderer, mapSizeX, mapSizeY);   
-    CHECK_ERROR(renderer == NULL, SDL_GetError());
-
-    // Initial renderer color
-	restart:
-	//if (!animate) {
-	initialSeed = time(NULL); // 1708518104 //1690361670; // time(NULL); // 1690274433;
-	//}
-	printf("%d\n",initialSeed);
-	srand(initialSeed);
-    SDL_SetRenderDrawColor(renderer, 16, 16, 16, 255);	
-	SDL_RenderClear(renderer);
-	
-	// Pregen
-	for (y = 0; y < mapSizeY; y++) {
-		for (x = 0; x < mapSizeX; x++) {
-			placeTile(x,y,oceanTile);
-			heightMap[x][y] = 0.0f;
-		}
-	}
-	printf("Pregeneration\n");
-	
-	for (int i = 0; i < numberOfOldRandomValues; i++) {
-		previousRandomValues[i] = getRandomLimited(5);
-	}
-	
-	if (textMode) {
-		printf("\x1b[2J"); // Clear Screen
-		printf("\x1b[H"); // Set Cursor to Home
-	}
-	
-	// Generation
-	
-	// Tectonic plates generation
-	generateTectonicPlates();
-	printf("Tectonic Plate Points\n");
-	
-	// Tectonic Plate Visualzation
-	for (int y = 0; y < mapSizeY; y++) {
-		//updateProgressBar(scaleToValue(y,mapSizeY,100)+1,0);
-		for (int x = 0; x < mapSizeX; x++) {
-		// this is for a single landmass "chunk"
-			int closest = mapSizeX*mapSizeY;
-			int closestPoint = 0;
-			for (int k = 0; k < tectonicPlates; k++) {
-				int value = wrapped_distance(x,y,tectonicPlatesOrigin[k].x,tectonicPlatesOrigin[k].y,mapSizeX,mapSizeY);
-				if (value < closest) {
-					closestPoint = k;
-					closest = value;
-				}
-			}
-			if (closest < 255) {
-				closest = closest*-1;
-				SDL_SetRenderDrawColor(renderer, closest, closest, closest, 255);
-				heightMap[x][y] = closest;
-				if (closest < deepestDepth) {
-					deepestDepth = closest;
-				}
-			} else {
-				SDL_SetRenderDrawColor(renderer, 32, 128, 255, 255);
-				heightMap[x][y] = -255;
-			}
-			//printf("%d,%d: %d\n",x,y,255-heightMap[x][y]);
-			if (visual & tectonicPlateBit) {
-				SDL_RenderDrawPoint(renderer, x, y);
-			}
-		}
-	}
-	
-	/*
-	int numberOfIslands = 10;
-	int islandBaseSize = 3;
-	int maxRandomModifer = 10;
-	int maxRandomIslandModifier = 0;
-	*/
-	// landmass
-	generateLandmasses();
-	printf("Landmass Generation\n");
-	tids = (pthread_t *)malloc(numberOfThreads * sizeof(pthread_t));
-	threadProgress = (int *)malloc(numberOfThreads * sizeof(int));
-	
-	if (tids == NULL) {
-		// handle memory allocation failure
-		printf("Could not allocate memory to threads!\n");
-		return 1;
-	}
-	
-	// Create Threads
-	for (int i = 0; i < numberOfThreads; i++) {
-		//generateIslands(i);
-		int ret = pthread_create(&tids[i], NULL, generateIslands, (void *)i); 
-		if (ret != 0) {
-			printf("Thread %d failed to create! Error code %d\n", i, ret);
-			return 1;
-		}
-	}
-	
-	// Supervise
-	int finishedLandmasses = 0;
-	while (!finishedLandmasses) {
-		int totalThreadProgress = 0;
-		for (int i = 0; i < numberOfThreads; i++) {
-			totalThreadProgress += threadProgress[i];
-		}
-		//printf("%d/%d\n", totalThreadProgress,(mapSizeX/landmassSize)*minSegment);
-		
-		updateProgressBar(scaleToValue(totalThreadProgress+1,mapSizeX/landmassSize,100),2);
-		if (totalThreadProgress==mapSizeX/landmassSize-(numberOfThreads)) {
-			finishedLandmasses = 1;
-		}
-	}
-	
-	// Rejoin them
-	for (int i = 0; i < numberOfThreads; i++) {
-		pthread_join(tids[i], NULL);
-	}
-	free(tids);
-	printf("Island Generation\n");
+int generateBiomes() {
 	
 	// Biomes based on landmass
 	for (int biomeY = 0; biomeY < mapSizeY/biomeSize; biomeY++) {
@@ -1519,20 +1318,80 @@ int WinMain(int argc, char **argv) {
 		}
 		//printf("\n");
 	}
-	SDL_RenderPresent(renderer);
 	printf("Biome Generation\n");
+	return 0;
+}
+
+int initializeArrays() {
+	// Initialize maps
+	finalMap = (color**)malloc(mapSizeX * sizeof(color*));
+    for (int i = 0; i < mapSizeX; i++) {
+        finalMap[i] = (color*)malloc(mapSizeY * sizeof(color));
+    }
+
+	map = (unsigned char**)malloc(mapSizeX * sizeof(unsigned char*));
+    for (int i = 0; i < mapSizeX; i++) {
+        map[i] = (unsigned char*)malloc(mapSizeY * sizeof(unsigned char));
+    }
 	
-	// Heightmap Processing
-	normalizeHeightmap();
-	addNoiseToHeightmap(30);
-	blurHeightmap(2);
-	addNoiseToHeightmap(5);
-	blurHeightmap(1);
-	addNoiseToHeightmap(3);
-	addNoiseToHeightmap(1);
-	printf("Heightmap Processing\n");
+	// Heightmaps
+	heightMap = (int**)malloc(mapSizeX * sizeof(int*));
+    for (int i = 0; i < mapSizeX; i++) {
+        heightMap[i] = (int*)malloc(mapSizeY * sizeof(int));
+    }
 	
-	// Prepare
+	// Biome Map
+	biomeMapSizeX = (((float)mapSizeX)/((float)biomeSize))+0.5;
+	biomeMapSizeY = (((float)mapSizeY)/((float)biomeSize))+0.5;
+	
+	biomeMap = (biomeInfo**)malloc((int)biomeMapSizeX * sizeof(biomeInfo*));
+    for (int i = 0; i < mapSizeX/biomeSize; i++) {
+        biomeMap[i] = (biomeInfo*)malloc((int)biomeMapSizeY * sizeof(biomeInfo));
+    }
+	
+	landmassMap = (unsigned char**)malloc(mapSizeX/landmassSize * sizeof(unsigned char*));
+    for (int i = 0; i < mapSizeX/landmassSize; i++) {
+        landmassMap[i] = (unsigned char*)malloc(mapSizeY/landmassSize * sizeof(unsigned char));
+    }
+	return 0;
+}
+
+int visualizeTectonicPlates() {
+	
+	for (int y = 0; y < mapSizeY; y++) {
+		//updateProgressBar(scaleToValue(y,mapSizeY,100)+1,0);
+		for (int x = 0; x < mapSizeX; x++) {
+		// this is for a single landmass "chunk"
+			int closest = mapSizeX*mapSizeY;
+			int closestPoint = 0;
+			for (int k = 0; k < tectonicPlates; k++) {
+				int value = wrapped_distance(x,y,tectonicPlatesOrigin[k].x,tectonicPlatesOrigin[k].y,mapSizeX,mapSizeY);
+				if (value < closest) {
+					closestPoint = k;
+					closest = value;
+				}
+			}
+			if (closest < 255) {
+				closest = closest*-1;
+				SDL_SetRenderDrawColor(renderer, closest, closest, closest, 255);
+				heightMap[x][y] = closest;
+				if (closest < deepestDepth) {
+					deepestDepth = closest;
+				}
+			} else {
+				SDL_SetRenderDrawColor(renderer, 32, 128, 255, 255);
+				heightMap[x][y] = -255;
+			}
+			//printf("%d,%d: %d\n",x,y,255-heightMap[x][y]);
+			if (visual & tectonicPlateBit) {
+				SDL_RenderDrawPoint(renderer, x, y);
+			}
+		}
+	}
+	return 0;
+}
+
+int generateFinalMap() {
 	for (int mapY = 0; mapY < mapSizeY; mapY++) {
 		if (mapY%10 == 0) {
 			updateProgressBar(scaleToValue(mapY,mapSizeY,100),4);
@@ -1696,6 +1555,168 @@ int WinMain(int argc, char **argv) {
 		}
 	}
 	printf("Tile Placement\n");
+	return 0;
+}
+
+int WinMain(int argc, char **argv) {
+    //for (int i = 0; i < argc; i++) printf("argv[%d] = %s\n", i, argv[i]);
+	//if (argc > 0) {
+		//numberOfThreads = atoi(argv[0]);
+		//printf("Number of Threads: %s\n", argv[0]);
+	//}
+
+	
+	// implement reading of parameters!!
+	if (numberOfThreads > 0) {
+		if (numberOfThreads != 1) {
+			if (numberOfThreads % 2) {
+				printf("Number of threads MUST be multiple of two!\n");
+				return 1;
+			}
+		}
+	} else {
+		printf("Number of threads is less than 1!\n");
+		return 1;
+	}
+	
+	mapSizeX = 1024;
+	mapSizeY = 512;
+	maximumVerticies = 25;
+	heighestHeight = 1;
+	
+	initializeArrays();
+	tectonicPlates = 20; //mapSizeX/(landmassSize*(2+(getRandomLimited(10))));
+	
+	// SDL2 Prep
+	// Seed the map
+	float renderScale = 1.0f;
+	
+	// Initialize SDL
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+    CHECK_ERROR(SDL_Init(SDL_INIT_VIDEO) != 0, SDL_GetError());
+
+	// Get Desktop size
+	SDL_DisplayMode dm;
+
+	if (SDL_GetDesktopDisplayMode(0, &dm) != 0)
+	{
+		 SDL_Log("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
+		 return 1;
+	}
+
+    // Create an SDL window
+    SDL_Window *window = SDL_CreateWindow("World Generator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w/3*2, dm.h/3*2, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE );
+    CHECK_ERROR(window == NULL, SDL_GetError());
+
+    // Create a renderer (accelerated and in sync with the display refresh rate)
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC); 
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+	//SDL_RenderSetScale(renderer, renderScale, renderScale);
+	SDL_RenderSetLogicalSize(renderer, mapSizeX, mapSizeY);   
+    CHECK_ERROR(renderer == NULL, SDL_GetError());
+
+    // Initial renderer color
+	restart:
+	//if (!animate) {
+	initialSeed = time(NULL); // 1708518104 //1690361670; // time(NULL); // 1690274433;
+	//}
+	printf("%d\n",initialSeed);
+	srand(initialSeed);
+    SDL_SetRenderDrawColor(renderer, 16, 16, 16, 255);	
+	SDL_RenderClear(renderer);
+	
+	// Pregen
+	for (y = 0; y < mapSizeY; y++) {
+		for (x = 0; x < mapSizeX; x++) {
+			placeTile(x,y,oceanTile);
+			heightMap[x][y] = 0.0f;
+		}
+	}
+	printf("Pregeneration\n");
+	
+	for (int i = 0; i < numberOfOldRandomValues; i++) {
+		previousRandomValues[i] = getRandomLimited(5);
+	}
+	
+	if (textMode) {
+		printf("\x1b[2J"); // Clear Screen
+		printf("\x1b[H"); // Set Cursor to Home
+	}
+	
+	// Generation
+	
+	// Tectonic plates generation
+	generateTectonicPlates();
+	printf("Tectonic Plate Points\n");
+	
+	// Tectonic Plate Visualzation
+	visualizeTectonicPlates();
+	
+	/*
+	int numberOfIslands = 10;
+	int islandBaseSize = 3;
+	int maxRandomModifer = 10;
+	int maxRandomIslandModifier = 0;
+	*/
+	// landmass
+	generateLandmasses();
+	printf("Landmass Generation\n");
+	tids = (pthread_t *)malloc(numberOfThreads * sizeof(pthread_t));
+	threadProgress = (int *)malloc(numberOfThreads * sizeof(int));
+	
+	if (tids == NULL) {
+		// handle memory allocation failure
+		printf("Could not allocate memory to threads!\n");
+		return 1;
+	}
+	
+	// Create Threads
+	for (int i = 0; i < numberOfThreads; i++) {
+		//generateIslands(i);
+		int ret = pthread_create(&tids[i], NULL, generateIslands, (void *)i); 
+		if (ret != 0) {
+			printf("Thread %d failed to create! Error code %d\n", i, ret);
+			return 1;
+		}
+	}
+	
+	// Supervise
+	int finishedLandmasses = 0;
+	while (!finishedLandmasses) {
+		int totalThreadProgress = 0;
+		for (int i = 0; i < numberOfThreads; i++) {
+			totalThreadProgress += threadProgress[i];
+		}
+		//printf("%d/%d\n", totalThreadProgress,(mapSizeX/landmassSize)*minSegment);
+		
+		updateProgressBar(scaleToValue(totalThreadProgress+1,mapSizeX/landmassSize,100),2);
+		if (totalThreadProgress==mapSizeX/landmassSize-(numberOfThreads)) {
+			finishedLandmasses = 1;
+		}
+	}
+	
+	// Rejoin them
+	for (int i = 0; i < numberOfThreads; i++) {
+		pthread_join(tids[i], NULL);
+	}
+	free(tids);
+	printf("Island Generation\n");
+	
+	generateBiomes();
+	SDL_RenderPresent(renderer);
+	
+	// Heightmap Processing
+	normalizeHeightmap();
+	addNoiseToHeightmap(30);
+	blurHeightmap(2);
+	addNoiseToHeightmap(5);
+	blurHeightmap(1);
+	addNoiseToHeightmap(3);
+	addNoiseToHeightmap(1);
+	printf("Heightmap Processing\n");
+	
+	// Prepare
+	generateFinalMap();
 	
 	// Print Map
     char running = 1;
@@ -1717,7 +1738,12 @@ int WinMain(int argc, char **argv) {
 				// Exit
                 if(strcmp(key, "Q") == 0) {
                     running = 0;
-                }    
+					SDL_DestroyRenderer(renderer);
+					SDL_DestroyWindow(window);
+					SDL_Quit();
+					pthread_exit(NULL);
+					return 0;
+				}    
 				// Export Image
                 if(strcmp(key, "W") == 0) {
 					bmpMode = 1;
@@ -1774,6 +1800,5 @@ int WinMain(int argc, char **argv) {
 
         // Show what was drawn
     }
-    pthread_exit(NULL); 
 	return 0;
 }
