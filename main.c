@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <conio.h>
+#if defined(_WIN32)
+	#include <conio.h>
+#endif
 #include <time.h>
 #include <math.h>
 #include <SDL2/SDL.h>
@@ -224,7 +226,11 @@ int updateProgressBar(int progress, int mode) {
 
 int find_max_along_line(int** arr, int m, int n, int x1, int y1, int x2, int y2) {
   int dx = x2 - x1, dy = y2 - y1;
-  int max_value = INT_MIN;
+	#if defined(_WIN32)
+		int max_value = INT_MIN;
+	#else
+		int max_value = -999999999;
+	#endif
   for (float t = 0; t <= 1; t += 0.5) { // Adjust step size based on desired precision
     int x = getWrappedAround((int)round(x1 + t * dx),mapSizeX);
     int y = getWrappedAround((int)round(y1 + t * dy),mapSizeY);
@@ -1558,7 +1564,11 @@ int generateFinalMap() {
 	return 0;
 }
 
-int WinMain(int argc, char **argv) {
+#if defined(_WIN32)
+	int WinMain(int argc, char **argv) {
+#else
+	int main(int argc, char **argv) {
+#endif
     //for (int i = 0; i < argc; i++) printf("argv[%d] = %s\n", i, argv[i]);
 	//if (argc > 0) {
 		//numberOfThreads = atoi(argv[0]);
