@@ -410,6 +410,14 @@ int addNoiseToHeightmap(int noiseIntensity) {
 	for (int y = 0; y < mapSizeY; y++) {
 		for (int x = 0; x < mapSizeX; x++) {
 			heightMap[x][y] += (rand()%noiseIntensity)-(noiseIntensity/2);
+
+			if (heightMap[x][y] > 255) {
+				heightMap[x][y] = 255;
+			}
+			if (heightMap[x][y] < 0) {
+				heightMap[x][y] = 0;
+			}
+
 			if (heightMap[x][y] > heighestHeight) {
 				heighestHeight = heightMap[x][y];
 			}
@@ -1627,6 +1635,7 @@ int generateFinalMap() {
 
     // Initial renderer color
 	restart:
+	deepestDepth = 0;
 	//if (!animate) {
 	initialSeed = time(NULL); // 1708518104 //1690361670; // time(NULL); // 1690274433;
 	//}
